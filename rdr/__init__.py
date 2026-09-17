@@ -2075,9 +2075,13 @@ def concordance( carrel, localLibrary=None, query='love', width=40 ) :
 		start = match.start()
 		end   = match.end()
 		
-		# get the characters before and after the query
+		# get the characters before and after the query, clipped at the
+		# nearest document boundary (B2.3) so a window never bleeds into
+		# an adjacent document; carrel.txt separates documents with '\f'
 		before = corpus[ start - width : start ]
 		after  = corpus[ end            : end + width ]
+		before = before.rsplit( '\f', 1 )[ -1 ]
+		after  = after.split(  '\f', 1 )[ 0 ]
 
 		# build the whole snippet and update
 		snippet = before + ' ' + query + ' ' + after
@@ -2323,12 +2327,15 @@ def ngrams( carrel, localLibrary=None, size=1, query=None, count=False, location
 		click.echo( "Error: Unknown value for location: { location }. Call Eric.", err=True )
 		exit()
 			
-	# read, tokenize, and normalize the text
-	tokens = nltk.word_tokenize( text, preserve_line=True )
-	tokens = [ token.lower() for token in tokens if token.isalpha() ]
-	
-	# create the set of ngrams
-	ngrams = list( nltk.ngrams( tokens, size ) )
+	# read, tokenize, and normalize the text one document at a time (B2.3),
+	# so an ngram never spans the boundary between two documents; carrel.txt
+	# separates documents with '\f' (see _txt2bow())
+	ngrams = []
+	for document in text.split( '\f' ) :
+
+		tokens = nltk.word_tokenize( document, preserve_line=True )
+		tokens = [ token.lower() for token in tokens if token.isalpha() ]
+		ngrams.extend( nltk.ngrams( tokens, size ) )
 	
 	# filter, conditionally
 	if query :
@@ -4125,11 +4132,12 @@ def _summarize( doc ) :
 def _txt2bow( carrel, localLibrary=None ) :
 
 	# configure; not quite right
-	PATTERN = '*.txt'
-	BOW     = 'carrel.txt'
-	TXT     = 'txt'
-	ETC     = 'etc'
-	
+	PATTERN   = '*.txt'
+	BOW       = 'carrel.txt'
+	TXT       = 'txt'
+	ETC       = 'etc'
+	SEPARATOR = '\n\f\n'
+
 	# require
 	from pathlib import Path
 
@@ -4137,13 +4145,18 @@ def _txt2bow( carrel, localLibrary=None ) :
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
 
-	# process each text file in the given directory
+	# process each text file in the given directory, separating documents
+	# with a form feed (B2.3) so n-grams and concordance windows never
+	# span a document boundary; _normalize() leaves \f alone (only \n, \t,
+	# and runs of spaces are touched), so it survives as a splittable marker
 	txt = localLibrary/carrel/TXT
 	bow = ''
 	for file in txt.glob( PATTERN ) :
-	
+
 		# create/increment the bag of words
-		with open( file, encoding='utf-8' ) as handle : bow += handle.read()
+		with open( file, encoding='utf-8' ) as handle : content = handle.read()
+		if bow : bow += SEPARATOR
+		bow += content
 	
 	# _normalize
 	bow = _normalize( bow )
