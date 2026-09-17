@@ -115,10 +115,19 @@ def _pivot( localLibrary, carrel, field, keys ) :
 	
 	# initialize
 	db         = str( localLibrary/carrel/ETC/DATABASE )
-	sql        = ( SQL % ( str( localLibrary ), carrel, field, field ) )
 	metadata   = str( localLibrary/carrel/MODELDIR/METADATA )
 	topics     = str( localLibrary/carrel/MODELDIR/TOPICS )
 	connection = sqlite3.connect( db )
+
+	# validate field against this carrel's actual bib columns; the
+	# old hard-coded -f choices ('use', 'track', 'year', ...) mostly
+	# named columns _file2bib() never populated
+	columns = [ row[ 1 ] for row in connection.execute( 'PRAGMA table_info( bib );' ) ]
+	if field not in columns :
+		click.echo( f"Error: '{ field }' is not a field in this carrel's bib table. Available fields: { ', '.join( columns ) }.", err=True )
+		exit()
+
+	sql = ( SQL % ( str( localLibrary ), carrel, field, field ) )
 
 	# search and save; should probably eliminate the I/O
 	results    = pd.read_sql_query( sql, connection )
@@ -1292,7 +1301,7 @@ def cmdSummarize( carrel, look ) :
 @click.option('-w', '--words', default=8, help="number of words used to describe topic" )
 @click.option('-i', '--iterations', default=2400, help="number of times to cacluate" )
 @click.option('-o', '--output', default='summary', type=click.Choice( [ 'summary', 'chart', 'topdocs', 'csv' ] ), help="type of report" )
-@click.option('-f', '--field', type=click.Choice( [ 'use', 'author', 'title', 'date', 'track', 'category', 'type', 'year', 'journal', 'topic', 'college', 'discipline', 'degree', 'pub_place' , 'region' ] ), help="field for pivoting" )
+@click.option('-f', '--field', type=click.STRING, help="field for pivoting; must be an actual column of this carrel's bib table (see 'rdr bib --help')" )
 @click.option('-y', '--type', default='pie', type=click.Choice( [ 'pie', 'bar', 'barh', 'line', 'scatter' ] ), help="type of chart" )
 @click.argument( 'carrel', metavar='<carrel>' )
 def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :

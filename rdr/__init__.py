@@ -3783,6 +3783,7 @@ def _file2bib( carrel, file, metadata=None, localLibrary=None ) :
 	from   tika                 import detector
 	from   tika                 import parser
 	import os
+	import pandas as pd
 	import spacy
 	import pytextrank
 	
@@ -3806,30 +3807,40 @@ def _file2bib( carrel, file, metadata=None, localLibrary=None ) :
 	text   = parsed[ 'content' ]	
 	if not text : return
 	
-	# get metadata from the metadata file	
-	if str( type( metadata ) ) == "<class 'pandas.core.frame.DataFrame'>" :
-		
+	# get metadata from the metadata file
+	extra = {}
+	if isinstance( metadata, pd.DataFrame ) :
+
 		# parse
 		index = Path( file ).name
-		
+
+		# ingest any metadata.csv columns beyond author/title/date, so
+		# -f (cmdTm) can pivot on real, user-supplied fields instead
+		# of the fixed bib schema
+		for column in metadata.columns :
+			if column not in ( 'author', 'title', 'date' ) : extra[ column ] = ''
+
 		# check to see if the index value exists
 		if index in metadata.index :
-		
+
 			if 'author' in metadata :
-		
+
 				author      = str( metadata.loc[ index ][ 'author' ] )
 				authorFound = True
-			
-			if 'title'  in metadata : 
-		
+
+			if 'title'  in metadata :
+
 				title  = metadata.loc[ index ][ 'title' ]
 				titleFound = True
-			
-			if 'date'   in metadata : 
-		
+
+			if 'date'   in metadata :
+
 				date      = str( metadata.loc[ index ][ 'date' ] )
 				dateFound = True
-		
+
+			# capture this document's value for each extra column
+			for column in extra : extra[ column ] = str( metadata.loc[ index ][ column ] )
+
 	# get metadata from the source file
 	metadata = parsed[ 'metadata' ] 
 	mimetype = detector.from_file( file )
@@ -3910,11 +3921,12 @@ def _file2bib( carrel, file, metadata=None, localLibrary=None ) :
 	with open( output, 'w', encoding='utf-8' ) as handle :
 	
 		try :
-		
-			# output the header and the data
-			handle.write( '\t'.join( HEADER ) + '\n' )
-			handle.write( '\t'.join( [ str( key ), author, str( title ), str( date ), pages, extension, mimetype, str( words ), str( sentences ), str( flesch ), summary, str( cache ), str( txt ) ] ) + '\n' )
-		
+
+			# output the header and the data; append any extra
+			# metadata.csv columns so -f (cmdTm) can pivot on them
+			handle.write( '\t'.join( HEADER + list( extra.keys() ) ) + '\n' )
+			handle.write( '\t'.join( [ str( key ), author, str( title ), str( date ), pages, extension, mimetype, str( words ), str( sentences ), str( flesch ), summary, str( cache ), str( txt ) ] + list( extra.values() ) ) + '\n' )
+
 		# trap weird TypeError
 		except TypeError : click.echo( ( "\nWARNING (TypeError): Probably weird author value extracted from PDF file (key: %s). Call Eric.\n" % key ), err=True )
 			
