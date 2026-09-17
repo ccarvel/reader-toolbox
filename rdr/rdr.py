@@ -13,8 +13,6 @@
 # constants for topic modeling
 MODELDIR        = 'etc/topic-model'
 VECTORS         = 'model.vec'
-TXT2VEC         = "%s/bin/mallet import-dir --input %s --output %s --keep-sequence TRUE --stoplist-file %s"
-VEC2MODEL       = "%s/bin/mallet train-topics --input %s --num-topics %s --num-top-words %s --num-top-docs %s --num-iterations %s --num-threads 48 --optimize-interval 10 --output-doc-topics %s/topics.tsv --output-state %s/model-state.gz --output-topic-docs %s/documents.txt --output-topic-keys %s/keys.tsv --topic-word-weights-file %s/weights.tsv --word-topic-counts-file %s/counts.txt --xml-topic-phrase-report %s/phrases.xml --diagnostics-file %s/diagnostics.xml --xml-topic-report %s/topics.xml"
 KEYS            = 'keys.tsv'
 KEYSHEADER      = [ 'ids', 'weights', 'features' ]
 DOCUMENTS       = 'documents.txt'
@@ -1313,6 +1311,7 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 	from pathlib import Path
 	import matplotlib.pyplot as plot
 	import os
+	import subprocess
 	import sys
 	import pandas as pd
 	from   sklearn.manifold  import TSNE
@@ -1330,23 +1329,41 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 	vectors      = str( localLibrary/carrel/MODELDIR/VECTORS )
 	keys         = str( localLibrary/carrel/MODELDIR/KEYS )
 	documents    = str( localLibrary/carrel/MODELDIR/DOCUMENTS )
-	
+	binary       = mallet + '/' + MALLETBIN
+	threads      = str( min( os.cpu_count() or 1, 48 ) )
+
 	# make sane for Windows
 	os.environ[ 'MALLET_HOME' ] = mallet
-	
+
 	# create a model
 	if process == 'model' :
-	
+
 		#  make sane
 		Path( modeldir ).mkdir( exist_ok=True )
 
-		# create vectors
-		command = ( TXT2VEC % ( mallet, corpus, vectors, stopwords ) )	
-		os.system( command )
-	
+		# create vectors; a list of args (not a shell string) so a
+		# carrel name or path with spaces or shell metacharacters
+		# can't break or inject into the MALLET invocation
+		subprocess.run( [ binary, 'import-dir', '--input', corpus, '--output', vectors, '--keep-sequence', 'TRUE', '--stoplist-file', stopwords ], check=True )
+
 		# topic model
-		command = ( VEC2MODEL % ( mallet, vectors, topics, words, TOPDOCS, iterations, modeldir, modeldir, modeldir, modeldir, modeldir, modeldir,  modeldir, modeldir, modeldir ) )
-		os.system( command )
+		subprocess.run( [ binary, 'train-topics',
+		                   '--input', vectors,
+		                   '--num-topics', str( topics ),
+		                   '--num-top-words', str( words ),
+		                   '--num-top-docs', str( TOPDOCS ),
+		                   '--num-iterations', str( iterations ),
+		                   '--num-threads', threads,
+		                   '--optimize-interval', '10',
+		                   '--output-doc-topics', modeldir + '/topics.tsv',
+		                   '--output-state', modeldir + '/model-state.gz',
+		                   '--output-topic-docs', modeldir + '/documents.txt',
+		                   '--output-topic-keys', modeldir + '/keys.tsv',
+		                   '--topic-word-weights-file', modeldir + '/weights.tsv',
+		                   '--word-topic-counts-file', modeldir + '/counts.txt',
+		                   '--xml-topic-phrase-report', modeldir + '/phrases.xml',
+		                   '--diagnostics-file', modeldir + '/diagnostics.xml',
+		                   '--xml-topic-report', modeldir + '/topics.xml' ], check=True )
 
 		# summarize and output
 		keys = _makeSummary( keys, KEYSHEADER )
