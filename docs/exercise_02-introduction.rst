@@ -1,7 +1,7 @@
 Exercise: Introduction
 ======================
 
-This is a short introduction to some of the Toolbox subcommands. It is not a complete listing of all subcommands, just a few of them to get you started. See `Commands in depth <./commands.html>`_ for more thorough documentation.
+This is a short introduction to some of the Toolbox subcommands. It is not a complete listing of all subcommands, just a few of them to get you started. See :doc:`Commands in depth <commands>` for more thorough documentation.
 
 Your first command
 ------------------
@@ -158,7 +158,7 @@ Summary
 
 The Toolbox is made up of many different commands. They are invoked by typing rdr followed the command itself. Append --help to any command to learn more about it.
 
-Now that you have gotten this far, see `Commands in depth <./commands.html>`_ for a complete listing of all the commands and how to use them.
+Now that you have gotten this far, see :doc:`Commands in depth <commands>` for a complete listing of all the commands and how to use them.
 
 Happy reading!
 

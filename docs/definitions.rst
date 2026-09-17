@@ -39,5 +39,5 @@ For more information see:
 
 *Embrace information overload. Use the Distant Reader.*
 
-See  `Installation <./installation.html>`_ and learn how to install the Toolbox.
+See :doc:`Installation <installation>` and learn how to install the Toolbox.
 
