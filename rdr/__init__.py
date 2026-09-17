@@ -4449,6 +4449,142 @@ def _txt2wrd( carrel, file, localLibrary=None ) :
 				if len( keyword ) < 3 : continue
 				handle.write( '\t'.join( ( key, keyword ) ) + '\n' )
 
+
+# B2.4: worker-process-local model, loaded once via a Pool initializer
+# instead of once per _txt2ent()/_txt2pos()/_txt2wrd() call
+_WORKERNLP = None
+
+def _initFeatureWorker() :
+
+	# require
+	import spacy
+
+	# load once for the lifetime of this worker process
+	global _WORKERNLP
+	_WORKERNLP = spacy.load( MODELMEDIUM )
+
+
+# split text on whitespace so no spaCy Doc has to hold more than maxChars
+# characters at once (B2.4); a no-op for anything under that size
+def _chunkText( text, maxChars=1000000 ) :
+
+	if len( text ) <= maxChars : return [ text ]
+
+	chunks = []
+	start  = 0
+	length = len( text )
+	while start < length :
+
+		end = min( start + maxChars, length )
+		if end < length :
+
+			# back up to the nearest space so a word is never split
+			split = text.rfind( ' ', start, end )
+			if split > start : end = split
+
+		chunks.append( text[ start:end ] )
+		start = end
+
+	return chunks
+
+
+# entities, parts-of-speech, and keywords from ONE spaCy parse per document
+# (B2.4), used by build()'s Pool instead of separately calling _txt2ent(),
+# _txt2pos(), and _txt2wrd() (each of which loads its own model and parses
+# the text again). Requires _initFeatureWorker() to have already set
+# _WORKERNLP in this worker process.
+def _txt2features( carrel, file, localLibrary=None ) :
+
+	# configure
+	ENT          = 'ent'
+	POS          = 'pos'
+	WRD          = 'wrd'
+	ENTEXTENSION = '.ent'
+	POSEXTENSION = '.pos'
+	WRDEXTENSION = '.wrd'
+	ENTHEADER    = [ 'id', 'sid', 'eid', 'entity', 'type' ]
+	POSHEADER    = [ 'id', 'sid', 'tid', 'token', 'lemma', 'pos' ]
+	WRDHEADER    = [ 'id', 'keyword' ]
+	NGRAMS       = ( 1, 2 )
+	TOPN         = 0.0125
+	NORMALIZE    = 'lower'
+	WINDOWSIZE   = 5
+	WRDPOS       = ( 'NOUN', 'PROPN' )
+	MAXCHARS     = 1000000
+
+	# require
+	from   pathlib                  import Path
+	from   textacy.extract.keyterms import yake
+
+	# _initialize
+	key          = _name2key( file )
+	if localLibrary : localLibrary = Path( localLibrary )
+	else            : localLibrary = configuration( 'localLibrary' )
+
+	# debug
+	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
+
+	# slurp up the file
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
+
+	# this worker's already-loaded model; chunk long documents so a single
+	# Doc never has to hold more than MAXCHARS characters
+	nlp            = _WORKERNLP
+	nlp.max_length = MAXCHARS + 1
+	chunks         = _chunkText( text, MAXCHARS )
+
+	# one parse per chunk (nlp.pipe), shared by ent/pos/wrd below
+	entOutput  = localLibrary/carrel/ENT/( key + ENTEXTENSION )
+	posOutput  = localLibrary/carrel/POS/( key + POSEXTENSION )
+	wrdRecords = []
+	sidOffset  = 0
+
+	with open( entOutput, 'w', encoding='utf-8' ) as entHandle, open( posOutput, 'w', encoding='utf-8' ) as posHandle :
+
+		entHandle.write( '\t'.join( ENTHEADER ) + '\n' )
+		posHandle.write( '\t'.join( POSHEADER ) + '\n' )
+
+		for doc in nlp.pipe( chunks ) :
+
+			sentences = list( doc.sents )
+
+			for s, sentence in enumerate( sentences ) :
+
+				sid = sidOffset + s + 1
+
+				for e, entity in enumerate( sentence.ents ) :
+					entHandle.write( '\t'.join( [ key, str( sid ), str( e + 1 ), entity.text, entity.label_ ] ) + '\n' )
+
+				for t, token in enumerate( sentence ) :
+					if token.text > ' ' :
+						posHandle.write( '\t'.join( [ key, str( sid ), str( t + 1 ), str( token.text ), str( token.lemma_.lower() ), token.pos_ ] ) + '\n' )
+
+			sidOffset += len( sentences )
+
+			# keywords; ranked per parsed chunk (a no-op distinction for
+			# the overwhelming majority of documents, which are one chunk)
+			try    : wrdRecords.extend( yake( doc, ngrams=NGRAMS, window_size=WINDOWSIZE, topn=TOPN, normalize=NORMALIZE, include_pos=WRDPOS ) )
+			except Exception as error : click.echo( f"WARNING: keyword extraction failed for { key }: { error }", err=True )
+
+	# check for records
+	if len( wrdRecords ) > 0 :
+
+		# open output
+		output = localLibrary/carrel/WRD/( key + WRDEXTENSION )
+		with open( output, 'w', encoding='utf-8' ) as handle :
+
+			# _initialize the output
+			handle.write( '\t'.join( WRDHEADER ) + '\n' )
+
+			# process each record
+			for record in wrdRecords :
+
+				# do the simplest of normalization and output
+				keyword = record[ 0 ]
+				if len( keyword ) < 3 : continue
+				handle.write( '\t'.join( ( key, keyword ) ) + '\n' )
+
+
 # start tika
 def _startTika() :
 
@@ -4529,7 +4665,7 @@ def _tsv2db( directory, extension, table, connection ) :
 		features.to_sql( table, connection, if_exists='replace', index=False )
 
 
-def build( carrel, directory, erase=False, start=False, localLibrary=None, profile='neutral' ) :
+def build( carrel, directory, erase=False, start=False, localLibrary=None, profile='neutral', jobs=None ) :
 
 	"""Create <carrel> from files in <directory>
 
@@ -4559,9 +4695,6 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 	ADR       = 'adr'
 	URL       = 'urls'
 	BIB       = 'bib'
-	POOLSMALL = 24
-	POOLBIG   = 24
-	
 	# require
 	from   multiprocessing import Pool
 	from   pathlib         import Path
@@ -4570,8 +4703,11 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 	import sqlite3
 	import pandas as pd
 	import spacy
-	
-	# _initialize
+
+	# _initialize; default worker count to the actual CPU count (B2.4) rather
+	# than the previous hard-coded 24, which oversubscribed smaller machines
+	POOLSMALL = jobs if jobs else os.cpu_count()
+	POOLBIG   = POOLSMALL
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
 	pool         = Pool( POOLSMALL )
@@ -4583,7 +4719,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 	if start :
 	
 		# debug
-		click.echo( '(Step #-1 of 9) Starting Tika server at http://localhost:9998/; please be patient.', err=True )
+		click.echo( '(Step #-1 of 7) Starting Tika server at http://localhost:9998/; please be patient.', err=True )
 		
 		# go
 		if _startTika() == False :
@@ -4616,7 +4752,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 		if erase :
 		
 			# debug and do the work
-			click.echo( ( '(Step #0 of 9) Deleting %s' % ( localLibrary/carrel ) ), err=True )
+			click.echo( ( '(Step #0 of 7) Deleting %s' % ( localLibrary/carrel ) ), err=True )
 			shutil.rmtree( localLibrary/carrel )
 			
 		# carrel exists and erasing was not specified
@@ -4629,7 +4765,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 			exit()
 
 	# build skeleton
-	click.echo( '(Step #1 of 9) Initializing %s with %s and stop words' % ( carrel, directory ), err=True )
+	click.echo( '(Step #1 of 7) Initializing %s with %s and stop words' % ( carrel, directory ), err=True )
 	_initialize( carrel, directory, localLibrary, profile )
 		
 	# create a list of filenames to process
@@ -4642,7 +4778,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 		else                    : filenames.append( os.path.join( cache, filename ) )
 	
 	# conditionally slurp up the metadata file and submit 
-	click.echo( '(Step #2 of 9) Extracting bibliographics and converting documents to plain text', err=True )
+	click.echo( '(Step #2 of 7) Extracting bibliographics and converting documents to plain text', err=True )
 	
 	# check for metadata file
 	if ( localLibrary/carrel/METADATA ).exists() :
@@ -4662,7 +4798,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 	pool = Pool( POOLBIG )
 
 	# bag of words
-	click.echo( '(Step #3 of 9) Creating bag-of-words', err=True )
+	click.echo( '(Step #3 of 7) Creating bag-of-words', err=True )
 	_txt2bow( carrel, localLibrary )
 	
 	# output hint
@@ -4674,46 +4810,35 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 	for filename in os.listdir( txt ) : filenames.append( os.path.join( txt, filename ) )
 
 	# extract email addresses
-	click.echo( '(Step #4 of 9) Extracting (email) addresses', err=True )
+	click.echo( '(Step #4 of 7) Extracting (email) addresses', err=True )
 	pool.starmap( _txt2adr, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
 	
 	# clean up
 	pool.close()
 	pool = Pool( POOLBIG )
 
-	# extract named entities
-	click.echo( '(Step #5 of 9) Extracting (named) entities', err=True )
-	pool.starmap( _txt2ent, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
-	
-	# clean up
+	# extract entities, parts-of-speech, and keywords -- one spaCy model
+	# load per worker (via the Pool initializer) and one parse per
+	# document, shared across all three (B2.4), instead of three separate
+	# pools each loading the model and parsing the text again
+	click.echo( '(Step #5 of 7) Extracting entities, parts-of-speech, and keywords', err=True )
 	pool.close()
-	pool = Pool( POOLBIG )
-
-	# extract parts-of-speech
-	click.echo( '(Step #6 of 9) Extracting parts-of-speech', err=True )
-	pool.starmap( _txt2pos, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
+	pool = Pool( POOLBIG, initializer=_initFeatureWorker )
+	pool.starmap( _txt2features, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
 
 	# clean up
 	pool.close()
 	pool = Pool( POOLBIG )
 
 	# extract urls
-	click.echo( '(Step #7 of 9) Extracting URLs', err=True )
+	click.echo( '(Step #6 of 7) Extracting URLs', err=True )
 	pool.starmap( _txt2url, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
-
-	# clean up
-	pool.close()
-	pool = Pool( POOLBIG )
-
-	# extract keywords
-	click.echo( '(Step #8 of 9) Extracting (key) words', err=True )
-	pool.starmap( _txt2wrd, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
 
 	# clean up
 	pool.close()
 
 	# create database
-	click.echo( '(Step #9 of 9) Creating and filling database (reducing)', err=True )
+	click.echo( '(Step #7 of 7) Creating and filling database (reducing)', err=True )
 	database   = str( localLibrary/carrel/ETC/DATABASE )
 	connection = sqlite3.connect( database )
 	cursor     = connection.cursor()
