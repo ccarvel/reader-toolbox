@@ -1,12 +1,39 @@
 from setuptools import setup, find_packages
 
-# 	install_requires=[ 'catalogue>=1.0.0', 'click>=7.1.2', 'datasette>=0.55', 'matplotlib>=3.4.2', 'nltk>=3.6.2', 'tika>=1.24', 'pandas>=1.3.2', 'requests>=2.26.0', 'pytextrank>=3.2.2', 'scikit-learn>=0.23.2', 'scipy>=1.7.1', 'srsly>=1.0.5', 'textacy>=0.12.0' ],
-
+# lower bounds are the versions actually tested against in Plan A's A0
+# environment baseline (.venv-rdr, Python 3.11, macOS arm64), not exact
+# pins (B3). datasette is dropped -- the `sql` command is disabled, so it
+# was an unused dependency. spacy is now declared directly instead of
+# arriving transitively via textacy/pytextrank.
 setup(
 license_files=["LICENSE"],
     name='reader-toolbox',
     packages=find_packages(),
     include_package_data=True,
-	install_requires=[ 'catalogue', 'click', 'datasette', 'matplotlib', 'nltk', 'tika', 'pandas', 'requests', 'pytextrank', 'scikit-learn', 'scipy', 'srsly', 'textacy', 'pytextrank', 'wordcloud', 'networkx', 'gensim', 'rdflib' ],
+	install_requires=[
+		'catalogue>=2.0.10',
+		'click>=8.5.0',
+		'gensim>=4.4.0',
+		'matplotlib>=3.11.2',
+		'networkx>=3.6.1',
+		'nltk>=3.10.3',
+		'pandas>=3.0.5',
+		'pytextrank>=3.3.0',
+		'rdflib>=7.6.0',
+		'requests>=2.34.2',
+		'scikit-learn>=1.9.1',
+		'scipy>=1.17.1',
+		'spacy>=3.8.16',
+		'srsly>=2.5.3',
+		'textacy>=0.13.0',
+		'tika>=3.3.2',
+		'wordcloud>=1.9.6',
+	],
+	extras_require={
+		# _download() (rdr/rdr.py) imports fsspec but is dead code -- its
+		# only call site is already commented out -- so fsspec is declared
+		# here rather than as a hard dependency (B3)
+		'notebooks' : [ 'fsspec' ],
+	},
     entry_points={ 'console_scripts': [ 'rdr = rdr.rdr:rdr' ] }
 )
