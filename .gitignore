@@ -3,4 +3,5 @@ __pycache__
 .ipynb_checkpoints
 dist/
 reader_toolbox.egg-info/
+docs/_build/
 x-*
