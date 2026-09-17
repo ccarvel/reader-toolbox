@@ -2951,6 +2951,7 @@ def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=Fal
 	from textacy import extract
 	from os      import system
 	from re      import search
+	import sys
 
 	# sanity check
 	checkForCarrel( carrel )
@@ -3013,7 +3014,7 @@ def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=Fal
 		# sanity check
 		if not noun :
 		
-			sy.stderr.write( "Error: When specifying sss, the -n option is required. See 'rdr grammars --help'\n" )
+			sys.stderr.write( "Error: When specifying sss, the -n option is required. See 'rdr grammars --help'\n" )
 			exit()
 			
 		# do the work
