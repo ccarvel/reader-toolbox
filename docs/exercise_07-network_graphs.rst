@@ -7,34 +7,14 @@ At a minium, network diagrams -- "graphs" -- contains two things: 1) nodes, and 
 
 Since word are known by the company they keep, drawing dots on a piece of paper -- each denoting a word, and then connecting the dots denoting proximity, we can beging to answer the question, "When a given word is used, what other words are used in conjuction?" A more complicated question can be, "When these people are mentioned, what verbs (actions) do they share in common?" In this way the student, researcher, or scholar can compare and contrast things (nodes).
 
-Collocations
-------------
+.. note::
 
-The simpliest, but also the least subtle, way to illustrate the relationships between words in study carrels is to exploit the collocationsl subcommand. For example, the following command will create a set of colloctions of all words in a carrel, and output a network graph::
+   The ``collocations`` subcommand shown in earlier revisions of this
+   exercise was removed from the CLI in commit ``ec84060`` (2026-05-27)
+   and no longer exists. Its network-graph output can be approximated
+   with the ``ngrams`` and ``grammars`` techniques below.
 
-	rdr collocations homer
-
-The result will look something like the following image, and at first glance the result is useless, but one can zoom into the graph and literally see relationships between words:
-
-.. image:: ./figures/network-01.png
-
-
-Gephi
------
-
-Gephi is a cross-platform, open source piece of software excelling at interpreting network graphs as will as visualing them. Sure, the application requires a lot of practice, but it is full-featured and enables you to tell compelling stories. For example, the previous command can be augmented to output and/or export a specific network graph data structure called Graph Modeling Langauge (GML), like this::
-
-	# collocate all words and output a stream of GML
-	rdr collocations homer -o gml
-
-	# collocate all words, output GML, and save it to a file
-	rdr collocations homer -o gml > homer.gml
-
-Once you create a GML file, you can open it in Gephi, apply any number of statistical mesures to it, filter the results, and finally come up with an illustration such as the following:
-
-.. image:: ./figures/network-02.png
-
-From the result you can see how words form themes as well as see what words have high statistically significance (words with high "betweeness" values). Thus, the result is a cross between an unigram word cloud and topic modeling. On the other hand, the result is not very targeted. 
+Gephi is a cross-platform, open source piece of software excelling at interpreting network graphs as well as visualizing them. Sure, the application requires a lot of practice, but it is full-featured and enables you to tell compelling stories. The Toolbox itself does not export a bigram- or collocation-based graph directly, but its tab-delimited output is already an adjacency list, so it imports into Gephi with no conversion step.
 
 Bigrams
 -------
@@ -67,9 +47,10 @@ The resulting adjacency file (ahu.tsv) can then be imported into Gephi and visua
 
 The following outlines how you can create an illustration such as the one above.
 
-1. Step #1
-2. Step #2
-3. Step #3
+1. Launch Gephi and choose *File > Import Spreadsheet*, select ``ahu.tsv``, and set *As table* to **Edges table**.
+2. On the next screen, map the bigram's first word to *Source* and its second word to *Target*; leave the separator as tab.
+3. Click *Finish*, then in the *Overview* tab run the *ForceAtlas2* layout (Layout panel) until the graph settles.
+4. Under *Statistics*, run *Average Degree* and *Modularity*; color nodes by modularity class and size them by degree to surface clusters and hubs.
 
 
 Documents and grammars
@@ -85,24 +66,22 @@ A very similar network can be illustrated by exploiting the grammars subcommand:
 
 .. image:: ./figures/network-05.png
 
-1. Step 1
-2. Step 2
-3. Step 3
+Import ``ahu.tsv`` into Gephi the same way as the bigrams example above: *File > Import Spreadsheet*, **Edges table**, first column as *Source*, second as *Target*, then run *ForceAtlas2* from the *Overview* tab.
 
 
 Documents and keywords
 ----------------------
 
-Run some SQL::
+The ``sql`` subcommand shown in earlier revisions of this exercise was removed from the CLI; query the carrel's database directly with the ``sqlite3`` command-line tool instead::
 
 	# create an edges table of books and keywords
-	SELECT id AS 'source', keyword AS 'target' FROM wrd
+	sqlite3 -header -separator $'\t' etc/carrel.db "SELECT id AS 'source', keyword AS 'target' FROM wrd" > book-keywords.tsv
 
 .. image:: ./figures/network-06.png
 .. image:: ./figures/network-07.png
 .. image:: ./figures/network-08.png
 
-1. Step 1
-2. Step 2
-3. Step 3
+1. Import ``book-keywords.tsv`` into Gephi via *File > Import Spreadsheet* as an **Edges table**, with *source* mapped to *Source* and *target* to *Target*.
+2. In the *Data Laboratory* tab, open the *Nodes* table and add a boolean column (for example ``is_keyword``) so books and keywords can be styled or filtered separately once merged.
+3. Back in *Overview*, run *ForceAtlas2*, then color and size nodes by degree to see which keywords bridge the most books.
 
