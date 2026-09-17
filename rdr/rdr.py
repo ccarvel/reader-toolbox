@@ -128,8 +128,9 @@ def _pivot( localLibrary, carrel, field, keys ) :
 	topics   = pd.read_csv( topics, sep='\t' )	
 	metadata = pd.read_csv( metadata )
 	
-	# create generic labels
-	labels  = LABELS
+	# create generic labels; a fresh copy, so appending to it below
+	# doesn't mutate the shared module-level LABELS constant
+	labels  = list( LABELS )
 	columns = topics.shape[ 1 ]
 	for i in range( 0, columns - 2 ) :
 
@@ -1438,8 +1439,10 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 				topics = str( localLibrary/carrel/MODELDIR/TOPICS )
 				topics = pd.read_csv( topics, sep='\t' )
 
-				# create generic labels
-				labels  = LABELS
+				# create generic labels; a fresh copy, so appending to it
+				# below doesn't mutate the shared module-level LABELS
+				# constant
+				labels  = list( LABELS )
 				columns = topics.shape[ 1 ]
 				for i in range( 0, columns - 2 ) :
 
