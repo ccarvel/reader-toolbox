@@ -29,6 +29,7 @@ LABELS          = [ 'docId', 'file' ]
 
 # require
 from rdr import *
+from rdr import _writeConfigurations
 
 
 def _makeSummary( keys, header ) :
@@ -89,15 +90,11 @@ def _checkForMallet( mallet ) :
 		
 		# initialize
 		click.echo( "\n  INFO: Updating configurations... " )
-		configurations          = ConfigParser()
-		applicationDirectory    = Path.home()
-		configurationFile       = applicationDirectory/CONFIGURATIONFILE
 		localLibrary            = configuration( 'localLibrary' )
 		tikaHome                = configuration( 'tikaHome' )
 		notebooksHome           = configuration( 'notebooksHome' )
 		malletHome              = Path.home()/'mallet'
-		configurations[ "RDR" ] = { "localLibrary"  : localLibrary, "malletHome" : malletHome, "tikaHome" : tikaHome, 'notebooksHome' : notebooksHome }
-		with open( str( configurationFile ), 'w' ) as handle : configurations.write( handle )
+		_writeConfigurations( localLibrary, malletHome, tikaHome, notebooksHome )
 
 		# make mallet executable
 		click.echo( "\n  INFO: Making MALLET executable... " )

@@ -1273,6 +1273,28 @@ def initializeConfigurations() :
 	( Path.home()/READERLIBRARY ).mkdir( exist_ok=True )
 
 
+def _writeConfigurations( localLibrary, malletHome, tikaHome, notebooksHome ) :
+
+	'''Given the Toolbox's four configuration values, write all of
+	them to the configuration file together. Returns nothing.'''
+
+	# require
+	from configparser import ConfigParser
+	from pathlib      import Path
+
+	# initialize
+	configurations       = ConfigParser()
+	applicationDirectory = Path.home()
+	configurationFile    = applicationDirectory/CONFIGURATIONFILE
+
+	# save them, all four, every time
+	configurations[ "RDR" ] = { "localLibrary"  : str( localLibrary ),
+								"malletHome"    : str( malletHome ),
+								"notebooksHome" : str( notebooksHome ),
+								"tikaHome"      : str( tikaHome ) }
+	with open( str( configurationFile ), 'w', encoding='utf-8' ) as handle : configurations.write( handle )
+
+
 def configuration( name ) :
 
 	'''Given a configuration name (localLibrary, malletHome,
@@ -1285,18 +1307,19 @@ def configuration( name ) :
 
 	# initialize
 	applicationDirectory = Path.home()
-	configurationFile    = applicationDirectory/CONFIGURATIONFILE	
+	configurationFile    = applicationDirectory/CONFIGURATIONFILE
 	configurations       = ConfigParser()
-	
+
 	# read configurations file
 	configurations.read( str( configurationFile ) )
-	
-	# get configurations
-	localLibrary  = configurations[ 'RDR' ][ 'localLibrary' ]
-	malletHome    = configurations[ 'RDR' ][ 'malletHome' ] 
-	tikaHome      = configurations[ 'RDR' ][ 'tikaHome' ] 
-	notebooksHome = configurations[ 'RDR' ][ 'notebooksHome' ] 
-	
+
+	# get configurations, falling back to initializeConfigurations()'s
+	# defaults for any key a stale or partially-written file is missing
+	localLibrary  = configurations.get( 'RDR', 'localLibrary',  fallback=str( Path.home()/READERLIBRARY ) )
+	malletHome    = configurations.get( 'RDR', 'malletHome',    fallback=str( Path.home()/MALLETHOME ) )
+	tikaHome      = configurations.get( 'RDR', 'tikaHome',      fallback=str( Path.home()/TIKAHOME ) )
+	notebooksHome = configurations.get( 'RDR', 'notebooksHome', fallback=str( Path.home()/NOTEBOOKSHOME ) )
+
 	# done
 	if   name == 'localLibrary'  : return( Path( localLibrary ) )
 	elif name == 'malletHome'    : return( Path( malletHome ) )
@@ -3526,14 +3549,11 @@ def _checkForTika( tika ) :
 
 		# _initialize
 		click.echo( "\n  INFO: Updating configurations... " )
-		configurations          = ConfigParser()
-		applicationDirectory    = Path.home()
-		configurationFile       = applicationDirectory/CONFIGURATIONFILE
 		localLibrary            = configuration( 'localLibrary' )
 		malletHome              = configuration( 'malletHome' )
+		notebooksHome           = configuration( 'notebooksHome' )
 		tikaHome                = Path.home()/TIKAHOME
-		configurations[ "RDR" ] = { "localLibrary"  : localLibrary, "malletHome" : malletHome, "tikaHome" : tikaHome }
-		with open( configurationFile, 'w', encoding='utf-8'  ) as handle : configurations.write( handle )
+		_writeConfigurations( localLibrary, malletHome, tikaHome, notebooksHome )
 
 		# done
 		click.echo( '''
