@@ -34,6 +34,9 @@ license_files=["LICENSE"],
 		# only call site is already commented out -- so fsspec is declared
 		# here rather than as a hard dependency (B3)
 		'notebooks' : [ 'fsspec' ],
+		# docs/commands.rst is sphinx-click-generated from the CLI's own
+		# docstrings (B4), so it cannot drift from the live command set
+		'docs' : [ 'sphinx>=9.0.4', 'sphinx-click>=6.2.0' ],
 	},
     entry_points={ 'console_scripts': [ 'rdr = rdr.rdr:rdr' ] }
 )

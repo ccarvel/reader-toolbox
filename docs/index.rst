@@ -18,6 +18,7 @@ A command-line tool for creating and interacting with Distant Reader study carre
 	commands
 	exercise_03-building_carrrels
 	structure
+	limitations
 	gui
 	quips
 	exercise_04-word_clouds

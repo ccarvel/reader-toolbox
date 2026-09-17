@@ -1,27 +1,6 @@
 Use cases
 =========
 
-
-analyzing Web Of Science
-------------------------
-
-
-reading collections from the HathiTrust
----------------------------------------
-
-
-analyzing open access articles
-------------------------------
-  
-  
-creating a carrel from email messages
--------------------------------------
-
-
-reading an entire blog
-----------------------
-
-
 Reading DHQ
 -----------
 
@@ -34,7 +13,7 @@ First of all, extents. The corpus numbers about 400 articles, for a total of 3.3
 .. image:: ./figures/dhq-readability-histogram.png
 .. image:: ./figures/dhq-readability-boxplot.png
 
-Second, I created a rudimentary bibliography, and it is complete with computed summaries and computed keywords. The frequencies of the keywords can be illustrated as a word cloud. After removing dominate keywords like "digital", and "humanties", the cloud is interesting. 
+Second, I created a rudimentary bibliography, and it is complete with computed summaries and computed keywords. The frequencies of the keywords can be illustrated as a word cloud. After removing dominate keywords like "digital", and "humanties", the cloud is interesting.
 
 .. image:: ./figures/dhq-keywords.png
 
@@ -45,9 +24,9 @@ Third, after doing quick & dirty topic modeling with seven topics, the topics co
     reading  0.35646  reading digital new media literary literature ...
        data  0.28013  data information research design visualization...
        text  0.26300  text digital texts work textual new archive pr...
-   analysis  0.15128  analysis text words data texts results also word 
-        des  0.01854                  des les dans une par qui que est 
-        que  0.01266                 que los las del una para por como 
+   analysis  0.15128  analysis text words data texts results also word
+        des  0.01854                  des les dans une par qui que est
+        que  0.01266                 que los las del una para por como
 
 Transforming the result into a pie chart illustrates how no theme dominates. Plotting the two most significant topics ("digital" and "reading") over time emphasizes the point; themes ebb & flow to a great degree; the journal does not manifest a single, over-arching theme.
 
@@ -60,7 +39,7 @@ Compare this with Pride And Prejudice, and one can see how the theme "Elizabeth"
 .. image:: ./figures/dhq-pride.png
 
 
-I tried to model collocations in the form of a network graph, but the model did not turn out very well, but the result -- just like the topic modeling -- illustrates the existence of non-English words and a number of TEI elements in the texts. This needs to be improved. 
+I tried to model collocations in the form of a network graph, but the model did not turn out very well, but the result -- just like the topic modeling -- illustrates the existence of non-English words and a number of TEI elements in the texts. This needs to be improved.
 
 .. image:: ./figures/dhq-collocations.png
 
@@ -70,3 +49,10 @@ Such is what I learned so far, and further investigation would require more spec
 
 Fun with text mining.
 
+.. note::
+
+   The "weights" column above predates a later fix that renamed it to
+   ``alpha`` in ``keys.tsv`` (it is MALLET's per-topic Dirichlet alpha,
+   not a document-proportion share) and switched the pie chart to mean
+   document-topic proportions instead. See :doc:`commands` (``tm``) for
+   current output.
