@@ -741,11 +741,12 @@ def graph2gml( carrel, output='gml', save=False, erase=False, localLibrary=None 
 
 
 # given the name of a carrel, output sentences
-def sentences( carrel, process='list', query='love', save=True ) :
+def sentences( carrel, process='list', query='love', save=True, refresh=False ) :
 
 	# configure
 	PATTERN = '*.txt'
-	
+	KEY     = 'sentences'
+
 	# require
 	import rdr
 	import multiprocessing
@@ -758,7 +759,7 @@ def sentences( carrel, process='list', query='love', save=True ) :
 
 	checkForCarrel( carrel )
 
-	if not sentences.exists() :
+	if not sentences.exists() or refresh or _cacheIsStale( carrel, library, KEY ) :
 	
 		# parallel process each plain text file in the given corpus
 		pool    = multiprocessing.Pool()
@@ -777,6 +778,7 @@ def sentences( carrel, process='list', query='love', save=True ) :
 				for sentence in result : handle.write( '%s\n' % sentence )
 
 		# done
+		_cacheRecord( carrel, library, KEY )
 		click.echo( 'Done.', err=True )
 
 	if process == 'list' and save == False :
@@ -1398,7 +1400,76 @@ def checkForCarrel( carrel, localLibrary=None ) :
 ''' % carrel ), err=True )
 		exit()
 
-	
+
+CACHESIGNATURES = 'cache.json'
+
+def _cacheSignature( carrel, localLibrary ) :
+
+	'''Given the name of a study carrel, compute a signature for the
+	inputs that derived caches (semantics, grammars, sentences,
+	search) depend on: a SHA-256 of stopwords.txt plus the newest
+	mtime under txt/. Returns a dict suitable for JSON storage.'''
+
+	# require
+	from hashlib import sha256
+
+	# initialize
+	stopwords = localLibrary/carrel/ETC/STOPWORDS
+	txt       = localLibrary/carrel/TXT
+
+	# hash the stopword list, if there is one
+	digest = sha256()
+	if stopwords.exists() : digest.update( stopwords.read_bytes() )
+
+	# find the newest mtime under txt/, if there is a txt/
+	mtime = 0.0
+	if txt.is_dir() :
+		for file in txt.glob( '*.txt' ) : mtime = max( mtime, file.stat().st_mtime )
+
+	return { 'stopwords' : digest.hexdigest(), 'txt_mtime' : mtime }
+
+
+def _cacheIsStale( carrel, localLibrary, key ) :
+
+	'''Given the name of a study carrel and a cache key (semantics,
+	grammars, sentences, or search), return True if the carrel's
+	current signature disagrees with what was last recorded for that
+	key in etc/cache.json, or if nothing was recorded yet.'''
+
+	# require
+	import json
+
+	# initialize
+	cacheFile = localLibrary/carrel/ETC/CACHESIGNATURES
+	current   = _cacheSignature( carrel, localLibrary )
+
+	if not cacheFile.exists() : return True
+
+	try    : recorded = json.loads( cacheFile.read_text( encoding='utf-8' ) )
+	except ( json.JSONDecodeError, OSError ) : return True
+
+	return recorded.get( key ) != current
+
+
+def _cacheRecord( carrel, localLibrary, key ) :
+
+	'''Given the name of a study carrel and a cache key, record the
+	carrel's current signature under that key in etc/cache.json, so
+	the next call to _cacheIsStale() for that key can detect drift.'''
+
+	# require
+	import json
+
+	# initialize
+	cacheFile = localLibrary/carrel/ETC/CACHESIGNATURES
+
+	try    : recorded = json.loads( cacheFile.read_text( encoding='utf-8' ) )
+	except ( FileNotFoundError, json.JSONDecodeError ) : recorded = {}
+
+	recorded[ key ] = _cacheSignature( carrel, localLibrary )
+	cacheFile.write_text( json.dumps( recorded ), encoding='utf-8' )
+
+
 # create a word cloud
 def cloud( frequencies, **kwargs ) :
 
@@ -2812,69 +2883,72 @@ def cluster( carrel, localLibrary=None, type='dendrogram', save=False ) :
 
 #
 # given a carrel, return a spacy doc
-def _carrel2doc( carrel ) :
+def _carrel2doc( carrel, refresh=False ) :
 
 	# configure
 	PICKLE = 'reader.spacy'
+	KEY    = 'grammars'
 
 	# require
 	from os        import path, stat
 	from spacy     import load
 	import                textacy
 	import sys
-	
+
 	# initialize
 	localLibrary = configuration( 'localLibrary' )
 	pickle       = localLibrary/carrel/ETC/PICKLE
 
-	# check to see if we've previously been here
-	if path.exists( pickle ) :
-		
+	# check to see if we've previously been here, and that nothing
+	# (stopwords, txt/) has changed since
+	if path.exists( pickle ) and not refresh and not _cacheIsStale( carrel, localLibrary, KEY ) :
+
 		# read the pickle file
 		try            : doc = next( textacy.io.spacy.read_spacy_docs( pickle, lang=MODELSMALL ) )
 		except OSError : modelNotFound()
-			
+
 	# otherwise
 	else :
-	
+
 		# warn
 		sys.stderr.write( '''Modeling study carrel data for future use. This may take many
 minutes, but it will only have to be done once. In the meantime,
 ask yourself, "Self, what is justice?"\n''' )
 
-		# initialize 
+		# initialize
 		file           = localLibrary/carrel/ETC/CORPUS
 		text           = open( str( file ) ).read()
 		size           = ( stat( file ).st_size ) + 1
-		
+
 		# initialize some more
 		try            : nlp  = load( MODELSMALL )
 		except OSError : modelNotFound()
-		
+
 		# do the work
 		nlp.max_length = size
 		doc            = nlp( text )
 
 		# save it for future use
 		textacy.io.spacy.write_spacy_docs( doc, filepath=pickle )
+		_cacheRecord( carrel, localLibrary, KEY )
 
 	# done
 	return doc
 
 
 # process grammars
-def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=False, count=False ) :
+def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=False, count=False, refresh=False ) :
 
 	# require
 	from textacy import extract
 	from os      import system
 	from re      import search
-	
+
 	# sanity check
 	checkForCarrel( carrel )
 
 	# initialize
-	doc = _carrel2doc( carrel )
+	doc = _carrel2doc( carrel, refresh=refresh )
 
 	# get the features; svo
 	if grammar == 'svo' :
@@ -3019,13 +3093,14 @@ def extractTokenizedSentences( file, stopwords ) :
 
 
 # make sure the carrel has been indexed
-def checkForSemanticIndex( carrel, localLibrary ) :
+def checkForSemanticIndex( carrel, localLibrary, refresh=False ) :
 
 	# configure; not quite right
 	VECTORS = 'carrel.vec'
 	PATTERN = '*.txt'
 	TOKENS  = 'carrel.tok'
-	
+	KEY     = 'semantics'
+
 	# require
 	from multiprocessing import Pool
 	from pathlib         import Path
@@ -3036,9 +3111,10 @@ def checkForSemanticIndex( carrel, localLibrary ) :
 	#localLibrary = configuration( 'localLibrary' )
 	vectors      = localLibrary/carrel/ETC/VECTORS
 	tokens       = localLibrary/carrel/ETC/TOKENS
-	
-	# see if we have been here previously
-	if not vectors.exists() :
+
+	# see if we have been here previously, and that nothing
+	# (stopwords, txt/) has changed since
+	if not vectors.exists() or refresh or _cacheIsStale( carrel, localLibrary, KEY ) :
 
 		filenames    = localLibrary/carrel/TXT
 		stopwords    = localLibrary/carrel/ETC/STOPWORDS
@@ -3066,13 +3142,14 @@ def checkForSemanticIndex( carrel, localLibrary ) :
 
 		# save and done
 		model.wv.save( str( vectors ) )
+		_cacheRecord( carrel, localLibrary, KEY )
 
 	# done
-	return	
+	return
 
 
 # implement semantic (word2vec) indexing
-def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=10 ) :
+def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=10, refresh=False ) :
 
 	'''types = similarity|distance|analogy|scatter'''
 
@@ -3091,7 +3168,7 @@ def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=1
 	
 	# sanity checks
 	checkForCarrel( carrel, library )
-	checkForSemanticIndex( carrel, library )
+	checkForSemanticIndex( carrel, library, refresh=refresh )
 		
 	# load model
 	model = gensim.models.KeyedVectors.load( vectors )
@@ -3188,9 +3265,10 @@ def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=1
 
 
 # make sure the carrel has been indexed; sqlite++
-def _checkForIndex( carrel, localLibrary ) :
+def _checkForIndex( carrel, localLibrary, refresh=False ) :
 
 	# configure
+	KEY            = 'search'
 	SANITYCHECK    = "SELECT * FROM sqlite_master WHERE type='table' AND name='fulltext';"
 	DROPFULLTEXT   = 'DROP TABLE IF EXISTS fulltext;'
 	CREATEFULLTEXT = 'CREATE TABLE fulltext ( id TEXT, fulltext TEXT );\n'
@@ -3222,10 +3300,11 @@ def _checkForIndex( carrel, localLibrary ) :
 	connection.isolation_level = None
 	cursor                     = connection.cursor()
 		
-	# check to see if we've been here previously
+	# check to see if we've been here previously, and that nothing
+	# (stopwords, txt/) has changed since
 	results = cursor.execute( SANITYCHECK ).fetchall()
-	if results == [] :
-		
+	if results == [] or refresh or _cacheIsStale( carrel, localLibrary, KEY ) :
+
 		# nope; create full text table
 		sys.stderr.write( 'Indexing; the carrel must be set up for full text searching.\n' )
 		sys.stderr.write( 'Step #1 of 4: Creating table to contain full text...\n' )
@@ -3284,13 +3363,14 @@ def _checkForIndex( carrel, localLibrary ) :
 		connection.execute( DROPINDX )
 		connection.execute( CREATEINDX )
 		connection.execute( INDEX )
+		_cacheRecord( carrel, localLibrary, KEY )
 
 		# done
 		sys.stderr.write( 'Done. Happy searching!\n' )
 		return
 		
 # do full text indexing and search
-def search( carrel, localLibrary=None, query='love', output='human' ) :
+def search( carrel, localLibrary=None, query='love', output='human', refresh=False ) :
 	'''output = csv|tsv|json|human|count'''
 
 	# configure
@@ -3313,7 +3393,7 @@ def search( carrel, localLibrary=None, query='love', output='human' ) :
 
 	# sanity checks
 	checkForCarrel( carrel, library )
-	_checkForIndex( carrel, library )
+	_checkForIndex( carrel, library, refresh=refresh )
 
 	txt          = str( library/carrel/TXT ) + '/'
 	cache        = str( library/carrel/CACHE ) + '/'

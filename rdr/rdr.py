@@ -381,12 +381,13 @@ def cmdZip( carrel ) :
 @click.option('-q', '--query', default='love', type=click.STRING, help="filter results to include the given regular expression")
 @click.option('-p', '--process', default='list', type=click.Choice( [ 'list', 'filter', 'define' ] ), help="type of work to do" )
 @click.option('-v', '--save', is_flag=True, help='write output to default location')
-def cmdSentences( carrel, process, query='love', save=False ) :
+@click.option('-r', '--refresh', is_flag=True, help='rebuild the cached sentences even if none of its inputs have changed')
+def cmdSentences( carrel, process, query='love', save=False, refresh=False ) :
 
 	'''Given <carrel> save, output, and process sentences'''
-	
+
 	# do the work
-	sentences( carrel, process, query, save )
+	sentences( carrel, process, query, save, refresh=refresh )
 
 
 # reconcile, create RDF, and graph
@@ -429,8 +430,9 @@ def cmdCatalog( human, location ) :
 @click.command( options_metavar='<options>' )
 @click.option('-o', '--output', default='human', type=click.Choice( [ 'human', 'csv', 'tsv', 'json', 'count' ] ), help='the format of the results')
 @click.option('-q', '--query', default='love', help='a full text query')
+@click.option('-r', '--refresh', is_flag=True, help='rebuild the search index even if none of its inputs have changed')
 @click.argument( 'carrel', metavar='<carrel>' )
-def cmdSearch( query, output, carrel ) :
+def cmdSearch( query, output, carrel, refresh=False ) :
 
 	'''Perform a full text query against <carrel>
 	
@@ -444,7 +446,7 @@ def cmdSearch( query, output, carrel ) :
 	  rdr search -q '"keep his anger"' homer'''
 
 	# do the work and done
-	click.echo( search( carrel, query=query, output=output ) )
+	click.echo( search( carrel, query=query, output=output, refresh=refresh ) )
 
 
 # word2vec
@@ -453,7 +455,8 @@ def cmdSearch( query, output, carrel ) :
 @click.option('-t', '--type', default='similarity', type=click.Choice( [ 'similarity', 'distance', 'analogy', 'scatter' ], case_sensitive=True ), help="query type")
 @click.option('-q', '--query', default='love', help='the word(s) to be used for search')
 @click.option('-s', '--size', default=10, help='number of results to return')
-def cmdSemantics( carrel, type, query, size ) :
+@click.option('-r', '--refresh', is_flag=True, help='rebuild the word embeddings even if none of its inputs have changed')
+def cmdSemantics( carrel, type, query, size, refresh=False ) :
 
 	'''Apply semantic indexing against <carrel>
 	
@@ -469,7 +472,7 @@ def cmdSemantics( carrel, type, query, size ) :
 	  rdr semantics -t analogy -q "king queen prince" homer'''
 
 	# do the work and done
-	click.echo( word2vec( carrel, type=type, query=query, topn=size ) )
+	click.echo( word2vec( carrel, type=type, query=query, topn=size, refresh=refresh ) )
 
 	
 ## collocations
@@ -508,8 +511,9 @@ def cmdSemantics( carrel, type, query, size ) :
 @click.option('-l', '--lemma',   default='be', help="only applicable to sss; the lemma of a verb, such as 'be' (default), 'have', or 'say'")
 @click.option('-s', '--sort',    is_flag=True, help='order the results alphabetically')
 @click.option('-c', '--count',   is_flag=True, help='tabulate the items in the result')
+@click.option('-r', '--refresh', is_flag=True, help='rebuild the cached spaCy doc even if none of its inputs have changed')
 @click.argument( 'carrel', metavar='<carrel>' )
-def cmdGrammars( carrel, grammar, query, noun, lemma, sort, count ) :
+def cmdGrammars( carrel, grammar, query, noun, lemma, sort, count, refresh=False ) :
 
 	"""Extract sentence fragments from <carrel> as in:
 	
@@ -531,7 +535,7 @@ def cmdGrammars( carrel, grammar, query, noun, lemma, sort, count ) :
 	  rdr grammars -g sss -n hector -l be homer"""
 	
 	# do the work
-	click.echo( grammars( carrel, grammar, query, noun, lemma, sort, count ) )
+	click.echo( grammars( carrel, grammar, query, noun, lemma, sort, count, refresh ) )
 	
 
 # cluster
