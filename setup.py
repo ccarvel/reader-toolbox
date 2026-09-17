@@ -32,8 +32,10 @@ license_files=["LICENSE"],
 	extras_require={
 		# _download() (rdr/rdr.py) imports fsspec but is dead code -- its
 		# only call site is already commented out -- so fsspec is declared
-		# here rather than as a hard dependency (B3)
-		'notebooks' : [ 'fsspec' ],
+		# here rather than as a hard dependency (B3). pyLDAvis is needed only
+		# by notebooks/150-topic-modeling-with-pyldavis.ipynb (B5); pin above
+		# 3.4.0, the first version without the removed pyLDAvis.sklearn module
+		'notebooks' : [ 'fsspec', 'pyLDAvis>=3.4.0' ],
 		# docs/commands.rst is sphinx-click-generated from the CLI's own
 		# docstrings (B4), so it cannot drift from the live command set
 		'docs' : [ 'sphinx>=9.0.4', 'sphinx-click>=6.2.0' ],
