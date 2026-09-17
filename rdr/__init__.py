@@ -2791,19 +2791,17 @@ def cluster( carrel, localLibrary=None, type='dendrogram', save=False ) :
 	MAXIMUM   = 0.95
 	MINIMUM   = 2
 	EXTENSION = '.txt'
+	METHOD    = 'average'
 
 	# require
 	from os                              import path, system, listdir
-	from scipy.cluster.hierarchy         import ward, dendrogram
+	from scipy.cluster.hierarchy         import linkage, dendrogram
+	from scipy.spatial.distance          import squareform
 	from sklearn.feature_extraction.text import TfidfVectorizer
 	from sklearn.manifold                import MDS
 	from sklearn.metrics.pairwise        import cosine_similarity
 	import matplotlib.pyplot             as     plt
 	from pathlib import Path
-	
-	# ignore warnings; probably not the greatest idea
-	import warnings
-	warnings.filterwarnings("ignore")
 
 	# initialize
 	if localLibrary : localLibrary = Path( localLibrary )
@@ -2822,13 +2820,20 @@ def cluster( carrel, localLibrary=None, type='dendrogram', save=False ) :
 
 	# branch according to type; dendrogram
 	if type == 'dendrogram' :
-		linkage_matrix = ward( distance )
+		# distance is a square, precomputed distance matrix (1 - cosine
+		# similarity), not a set of observations -- squareform() converts
+		# it to the condensed form linkage() actually expects (B2.5);
+		# ward() on the square matrix treated each row as an n-dimensional
+		# observation and SciPy warned about exactly that
+		linkage_matrix = linkage( squareform( distance, checks=False ), method=METHOD )
 		dendrogram( linkage_matrix, orientation="right", labels=keys )
-		plt.tight_layout() 
+		plt.tight_layout()
 
 	# cube
 	elif type == 'cube' :
-		mds = MDS( n_components=3, dissimilarity="precomputed", random_state=1 )
+		# dissimilarity="precomputed" -> metric="precomputed" (B2.5): scikit-learn
+		# renamed this parameter in 1.8 and removes dissimilarity in 1.10
+		mds = MDS( n_components=3, metric="precomputed", random_state=1 )
 		pos = mds.fit_transform( distance )
 		fig = plt.figure()
 		ax  = fig.add_subplot( 111, projection='3d' )
