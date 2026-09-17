@@ -1548,8 +1548,8 @@ def bibliography( carrel, localLibrary=None, format='text', save=False ) :
 
 	# query database
 	sql  = '''SELECT b.id, b.words, b.extension, b.flesch, b.author, b.title, b.date, GROUP_CONCAT( LOWER( w.keyword ), '; ') AS keywords, b.summary, b.mime
-			  FROM bib AS b, wrd AS w
-			  WHERE b.id = w.id
+			  FROM bib AS b
+			  LEFT JOIN wrd AS w ON b.id = w.id
 			  GROUP BY b.id
 			  ORDER BY b.id, LOWER( b.author );'''
 	rows  = connection.execute( sql )
@@ -3199,7 +3199,7 @@ def _checkForIndex( carrel, localLibrary ) :
 
 	# these are what we want
 	CREATEINDX     = 'CREATE VIRTUAL TABLE indx USING FTS5( id, author, title, date, summary, keyword, words, sentence, flesch, cache, txt, fulltext );'
-	INDEX          = 'INSERT INTO indx SELECT b.id, b.author, b.title, b.date, b.summary, group_concat( LOWER( w.keyword ), "; " ), b.words, b.sentence, b.flesch, b.id || b.extension, b.id || ".txt", f.fulltext FROM bib AS b, fulltext AS f, wrd AS w WHERE b.id IS f.id AND b.id IS w.id GROUP BY w.id;';
+	INDEX          = 'INSERT INTO indx SELECT b.id, b.author, b.title, b.date, b.summary, group_concat( LOWER( w.keyword ), "; " ), b.words, b.sentence, b.flesch, b.id || b.extension, b.id || ".txt", f.fulltext FROM bib AS b JOIN fulltext AS f ON b.id IS f.id LEFT JOIN wrd AS w ON b.id IS w.id GROUP BY b.id;';
 
 	# these work when "database is full"; no full text
 	#CREATEINDX     = 'CREATE VIRTUAL TABLE indx USING FTS5( id, author, title, date, summary, keyword, words, sentence, flesch, cache, txt );'
@@ -4208,8 +4208,11 @@ def _txt2wrd( carrel, file, localLibrary=None ) :
 	doc            = nlp( text )
 
 	# do the extraction
-	try    : records = ( yake( doc, ngrams=NGRAMS, window_size=WINDOWSIZE, topn=TOPN, normalize=NORMALIZE, include_pos=POS ) )
-	except : records = []
+	try :
+		records = ( yake( doc, ngrams=NGRAMS, window_size=WINDOWSIZE, topn=TOPN, normalize=NORMALIZE, include_pos=POS ) )
+	except Exception as error :
+		click.echo( f"WARNING: keyword extraction failed for { key }: { error }", err=True )
+		records = []
 	
 	# check for records
 	if len( records ) > 0 :
