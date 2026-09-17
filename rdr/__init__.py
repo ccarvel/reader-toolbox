@@ -1364,6 +1364,24 @@ def configuration( name ) :
 		exit()
 		
 
+def _spacyModelWheelURL( model ) :
+
+	'''Given a spaCy model name, return the exact wheel URL for the
+	version compatible with the installed spaCy, suitable for
+	'uv pip install <url>' when pip isn't available in this
+	interpreter.'''
+
+	# require
+	from spacy               import about
+	from spacy.cli.download  import get_compatibility, get_version, get_model_filename
+
+	compatibility = get_compatibility()
+	version       = get_version( model, compatibility )
+	filename      = get_model_filename( model, version )
+
+	return about.__download_url__ + '/' + filename
+
+
 def modelNotFound() :
 
 	'''When a spaCy model (as defined by the contants
@@ -1371,32 +1389,53 @@ def modelNotFound() :
 	called. It prompts the user for a y or n answer, and if the
 	answer is y, then the models are downloaded and installed. This
 	function exits the application after being called.'''
-	
+
 	# notify
 	click.echo( "Error: Langauge models not found.", err=True )
 	click.echo()
 	click.echo( f"This functions requires one of two different spaCy langauge models ({ MODELSMALL } and { MODELMEDIUM }) to be installed. This only has to be done once, and after the models have been installed you can run the command again.", err=True )
 	click.echo()
 	click.echo( 'Do you want to install the models now? [yn] ', err=True, nl=False )
-	
+
 	# get input
 	c = click.getchar()
 	click.echo()
-	
+
 	# branch accordingly; yes
 	if c == 'y' :
 
-		# require and do the work
-		from os import system
-		system( 'python -m spacy download ' + MODELSMALL )
-		system( 'python -m spacy download ' + MODELMEDIUM )
-	
+		# require
+		import importlib.util
+		import shutil
+		import subprocess
+		import sys
+
+		# always target this interpreter, not whatever "python" the
+		# calling shell happens to resolve to (which may not even be
+		# the interpreter rdr is running under, e.g. under uv)
+		if importlib.util.find_spec( 'pip' ) is not None :
+
+			subprocess.run( [ sys.executable, '-m', 'spacy', 'download', MODELSMALL ] )
+			subprocess.run( [ sys.executable, '-m', 'spacy', 'download', MODELMEDIUM ] )
+
+		# no pip in this interpreter (common in a bare `uv venv`);
+		# print the exact uv pip install command instead of failing
+		# with a cryptic "No module named pip"
+		elif shutil.which( 'uv' ) :
+
+			click.echo( "No pip found in this interpreter. Run these instead:\n", err=True )
+			for model in ( MODELSMALL, MODELMEDIUM ) : click.echo( '  uv pip install ' + _spacyModelWheelURL( model ), err=True )
+
+		else :
+
+			click.echo( "Neither pip nor uv is available in this interpreter. Install one of them and try again.", err=True )
+
 	# no
 	elif c == 'n' : click.echo( "Okay, but installing the model is necessary for this function to work. You'll be asked again next time.", err=True )
 
 	# error
 	else : click.echo( '???' )
-	
+
 	# done
 	exit()
 
