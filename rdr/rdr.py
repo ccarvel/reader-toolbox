@@ -305,7 +305,7 @@ def cmdAdr( carrel, count, like ) :
 @click.command( options_metavar='<options>' )
 @click.argument( 'carrel', metavar='<carrel>' )
 @click.option('-f', '--format', default='text', type=click.Choice( [ 'text', 'json' ] ), help='type of output')
-@click.option('-v', '--save', is_flag=False, help='save result in default location')
+@click.option('-v', '--save', is_flag=True, help='save result in default location')
 def cmdBib( carrel, format, save ) :
 
 	"""Output rudimentary bibliographics from <carrel>
@@ -320,8 +320,8 @@ def cmdBib( carrel, format, save ) :
 	  rdr info --help
 	  rdr search --help"""
 
-	if save : bibliography( carrel, format, save )
-	else    : click.echo( bibliography( carrel, None, format ) )
+	if save : bibliography( carrel, format=format, save=save )
+	else    : click.echo( bibliography( carrel, format=format ) )
 
 
 # download
