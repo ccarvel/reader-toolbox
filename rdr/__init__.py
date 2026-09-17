@@ -2971,10 +2971,12 @@ def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=Fal
 			#print( help(feature ) )
 			#exit()
 
-			subject = feature.subject[ 0 ].text			
-			verb    = feature.verb[ 0 ].text
-			object  = feature.object[ 0 ].text
-			items.append(' \t'.join( [ ''.join( subject ), ''.join( verb ), ''.join( object ) ] ) )
+			# join every token in each span, in document order, not
+			# just the first token
+			subject = ' '.join( token.text for token in sorted( feature.subject, key=lambda token : token.i ) )
+			verb    = ' '.join( token.text for token in sorted( feature.verb,    key=lambda token : token.i ) )
+			object  = ' '.join( token.text for token in sorted( feature.object,  key=lambda token : token.i ) )
+			items.append(' \t'.join( [ subject, verb, object ] ) )
 
 		# done
 		features = items
