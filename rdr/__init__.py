@@ -2798,13 +2798,14 @@ def entities( carrel, localLibrary=None, select='type', like='any', count=False,
 # do feature reduction and visualize
 def cluster( carrel, localLibrary=None, type='dendrogram', save=False ) :
 
-	'''Given the name of a study carrel, use PCA to reduce the
-	carrel's content to two or three dimensions and then
-	visualize the result. If the value of type is "dendrogram",
-	then reducd to two dimensions, and if the value of type is
-	"cube", then reduce to three dimensions. If the value of save
-	is True, then save the resulting image in the carrel's
-	figures directory.'''
+	'''Given the name of a study carrel, compute a TF-IDF vector for
+	each item, derive a cosine-distance matrix between them, and
+	visualize the result. If the value of type is "dendrogram", the
+	matrix is hierarchically clustered (average-linkage) into a two-
+	dimensional dendrogram; if the value of type is "cube", the
+	matrix is reduced via multidimensional scaling (MDS) to three
+	dimensions. If the value of save is True, then save the
+	resulting image in the carrel's figures directory.'''
 	
 	# configure
 	MAXIMUM   = 0.95
