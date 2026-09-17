@@ -2444,6 +2444,27 @@ def ngrams( carrel, localLibrary=None, size=1, query=None, count=False, location
 		return '\n'.join( results )
 
 
+# given the name of a study carrel, return its corpus as an nltk.Text
+# object, for use with NLTK's own concordance/dispersion-plot/collocations
+# API directly (re-added per B5, ADR-002; called by notebooks 110/120/170)
+def getNLTKText( carrel, localLibrary=None ) :
+
+	'''Given the name of a study carrel, return its corpus as an nltk.Text
+	object, suitable for NLTK's own concordance(), dispersion_plot(), and
+	collocations() methods.'''
+
+	import nltk
+	from pathlib import Path
+
+	_ensureNLTKData()
+	if localLibrary : localLibrary = Path( localLibrary )
+	else            : localLibrary = configuration( 'localLibrary' )
+	checkForCarrel( carrel, localLibrary )
+
+	text = open( str( localLibrary/carrel/ETC/CORPUS ), encoding='utf-8' ).read()
+	return nltk.Text( nltk.word_tokenize( text ) )
+
+
 # process parts-of-speech
 def pos( carrel, localLibrary=None, select='parts', like='any', count=False, normalize=True, wordcloud=False, save=False ) :
 
