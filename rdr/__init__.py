@@ -2487,28 +2487,38 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 	connection             = sqlite3.connect( str( localLibrary/carrel/ETC/DATABASE )  )
 	connection.row_factory = sqlite3.Row
 	items                  = []
-	
+
+	# carrels built before B2.8 lack the 'tag' column; degrade gracefully
+	# to matching only the Universal pos tag rather than raising
+	# "no such column: tag"
+	hasTag    = any( row[ 1 ] == 'tag' for row in connection.execute( 'PRAGMA table_info( pos );' ) )
+	tagClause = ' OR tag LIKE ?' if hasTag else ''
+	likeArgs  = lambda : ( like, like ) if hasTag else ( like, )
+
 	# branch accordingly; parts-of-speech
 	if select == 'parts' :
-	
+
 		# initialize like
 		if like == 'any' : like = '%'
 		else             : like = like.upper() + '%'
-		
+
 		# dump parts-of-speech tags
 		if not count :
 
-			# articulate sql, search, and output
-			sql  = "SELECT pos FROM pos WHERE pos LIKE ?;"
-			rows = connection.execute( sql, ( like, ) )
+			# articulate sql, search, and output; match either the
+			# Universal pos tag or the finer-grained Penn tag (B2.8),
+			# e.g. -l J matches nothing under Universal POS (no J-prefixed
+			# tag exists there) but now reaches Penn's JJ/JJR/JJS
+			sql  = "SELECT pos FROM pos WHERE pos LIKE ?" + tagClause + ";"
+			rows = connection.execute( sql, likeArgs() )
 			for row in rows : items.append( row[ 'pos' ] )
 
 		# count and tabulate the dump
 		else :
 
 			# articulate sql, search, and output
-			sql  = "SELECT pos, COUNT( pos ) AS count FROM pos WHERE pos LIKE ? GROUP BY pos ORDER BY count DESC;"
-			rows = connection.execute( sql, ( like, ) )
+			sql  = "SELECT pos, COUNT( pos ) AS count FROM pos WHERE pos LIKE ?" + tagClause + " GROUP BY pos ORDER BY count DESC;"
+			rows = connection.execute( sql, likeArgs() )
 			for row in rows : items.append( "\t".join( [ row[ 'pos' ], str( row[ 'count' ] ) ] ) )
 			
 	# words or lemmas
@@ -2525,33 +2535,35 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 		# simply dump the desired content
 		if not count :
 		
-			# build sql
-			if not normalize : sql = ( 'SELECT %s FROM pos WHERE pos LIKE ?;' % select )
-			else              : sql = ( 'SELECT LOWER( %s ) AS %s FROM pos WHERE pos LIKE ?;' % ( select, select ) )
+			# build sql; match either the Universal pos tag or the
+			# finer-grained Penn tag (B2.8)
+			if not normalize : sql = ( 'SELECT %s FROM pos WHERE pos LIKE ?%s;' % ( select, tagClause ) )
+			else              : sql = ( 'SELECT LOWER( %s ) AS %s FROM pos WHERE pos LIKE ?%s;' % ( select, select, tagClause ) )
 
 			# search and process each resulting row
-			rows = connection.execute( sql, ( like, ) )
+			rows = connection.execute( sql, likeArgs() )
 			for row in rows : items.append( row[ select ] )
 		
 		# count and tabulate the result
 		else:
 
-			# do not lower-case words or lemmas
+			# do not lower-case words or lemmas; match either the
+			# Universal pos tag or the finer-grained Penn tag (B2.8)
 			if not normalize : sql = ( '''SELECT %s AS %s, COUNT( %s ) AS count
 			                              FROM pos
-			                              WHERE pos LIKE ?
+			                              WHERE pos LIKE ?%s
 			                              GROUP BY %s
-			                              ORDER BY count DESC;''' % ( select, select, select, select ) )
+			                              ORDER BY count DESC;''' % ( select, select, select, tagClause, select ) )
 
 			# lower-case words or lemmas
 			else: sql = ( '''SELECT LOWER( %s ) AS %s, COUNT( %s ) AS count
 			                 FROM pos
-			                 WHERE pos LIKE ?
+			                 WHERE pos LIKE ?%s
 			                 GROUP BY LOWER( %s )
-			                 ORDER BY count DESC;''' % ( select, select, select, select ) )
+			                 ORDER BY count DESC;''' % ( select, select, select, tagClause, select ) )
 
 			# search and process each resulting row
-			rows = connection.execute( sql, ( like, ) )
+			rows = connection.execute( sql, likeArgs() )
 
 			# output simple tabulation
 			if not wordcloud :
@@ -4301,18 +4313,18 @@ def _txt2pos( carrel, file, localLibrary=None ) :
 	# configure
 	EXTENSION = '.pos'
 	POS       = 'pos'
-	HEADER    = [ 'id', 'sid', 'tid', 'token', 'lemma', 'pos' ]
+	HEADER    = [ 'id', 'sid', 'tid', 'token', 'lemma', 'pos', 'tag' ]
 
 	# require
 	import spacy
 	from pathlib import Path
-	
+
 	# _initialize
 	key          = _name2key( file )
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
-	
-	# debug 
+
+	# debug
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
@@ -4329,21 +4341,24 @@ def _txt2pos( carrel, file, localLibrary=None ) :
 
 		# _initialize the output
 		handle.write( '\t'.join( HEADER ) + '\n' )
-		
+
 		# process each sentence
 		for s, sentence in enumerate( doc.sents ) :
-			
+
 			# process each token
 			for t, token in enumerate( sentence ) :
 
 				# process non-spaces
 				if token.text > ' ' :
-	
-					# parse and output
+
+					# parse and output; pos is spaCy's Universal POS tag,
+					# tag is the finer-grained Penn Treebank tag (B2.8),
+					# e.g. 'ADJ' vs 'JJ'/'JJR'/'JJS'
 					feature = str( token.text )
 					lemma   = str( token.lemma_.lower() )
 					pos     = token.pos_
-					handle.write( '\t'.join( [  key, str( s + 1 ), str( t + 1 ), feature, lemma, pos ] ) + '\n' )
+					tag     = token.tag_
+					handle.write( '\t'.join( [  key, str( s + 1 ), str( t + 1 ), feature, lemma, pos, tag ] ) + '\n' )
 
 
 # given a file, extract domains and urls
@@ -4515,7 +4530,7 @@ def _txt2features( carrel, file, localLibrary=None ) :
 	POSEXTENSION = '.pos'
 	WRDEXTENSION = '.wrd'
 	ENTHEADER    = [ 'id', 'sid', 'eid', 'entity', 'type' ]
-	POSHEADER    = [ 'id', 'sid', 'tid', 'token', 'lemma', 'pos' ]
+	POSHEADER    = [ 'id', 'sid', 'tid', 'token', 'lemma', 'pos', 'tag' ]
 	WRDHEADER    = [ 'id', 'keyword' ]
 	NGRAMS       = ( 1, 2 )
 	TOPN         = 0.0125
@@ -4569,7 +4584,9 @@ def _txt2features( carrel, file, localLibrary=None ) :
 
 				for t, token in enumerate( sentence ) :
 					if token.text > ' ' :
-						posHandle.write( '\t'.join( [ key, str( sid ), str( t + 1 ), str( token.text ), str( token.lemma_.lower() ), token.pos_ ] ) + '\n' )
+						# pos is Universal POS, tag is the finer-grained
+						# Penn Treebank tag (B2.8)
+						posHandle.write( '\t'.join( [ key, str( sid ), str( t + 1 ), str( token.text ), str( token.lemma_.lower() ), token.pos_, token.tag_ ] ) + '\n' )
 
 			sidOffset += len( sentences )
 
@@ -4700,7 +4717,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None, profi
 	# configure
 	CACHE     = 'cache'
 	TXT       = 'txt'
-	SCHEMA    = '''-- parts-of-speech\ncreate table pos (\n    id    TEXT,\n    sid   INT,\n    tid   INT,\n    token TEXT,\n    lemma TEXT,\n    pos   TEXT\n);\n\n-- name entitites\ncreate table ent (\n    id     TEXT,\n    sid    INT,\n    eid    INT,\n    entity TEXT,\n    type   TEXT\n);\n\n-- keywords\ncreate table wrd (\n    id      TEXT,\n    keyword TEXT\n);\n\n-- email addresses\ncreate table adr (\n    id      TEXT,\n    address TEXT\n);\n\n-- questions\ncreate table questions (\n    id       TEXT,\n    question TEXT\n);\n\n-- urls\ncreate table url (\n    id     TEXT,\n    domain TEXT,\n    url    TEXT\n);\n\n-- bibliographics, such as they are\ncreate table bib (\n    id        TEXT,\n    words     INT,\n    sentence  INT,\n    flesch    INT,\n    summary   TEXT,\n    title     TEXT,\n    author    TEXT,\n    date      TEXT,\n    txt       TEXT,\n    cache     TEXT,\n    pages     INT,\n    extension TEXT,\n    mime      TEXT,\n    genre     TEXT\n);'''
+	SCHEMA    = '''-- parts-of-speech\ncreate table pos (\n    id    TEXT,\n    sid   INT,\n    tid   INT,\n    token TEXT,\n    lemma TEXT,\n    pos   TEXT,\n    tag   TEXT\n);\n\n-- name entitites\ncreate table ent (\n    id     TEXT,\n    sid    INT,\n    eid    INT,\n    entity TEXT,\n    type   TEXT\n);\n\n-- keywords\ncreate table wrd (\n    id      TEXT,\n    keyword TEXT\n);\n\n-- email addresses\ncreate table adr (\n    id      TEXT,\n    address TEXT\n);\n\n-- questions\ncreate table questions (\n    id       TEXT,\n    question TEXT\n);\n\n-- urls\ncreate table url (\n    id     TEXT,\n    domain TEXT,\n    url    TEXT\n);\n\n-- bibliographics, such as they are\ncreate table bib (\n    id        TEXT,\n    words     INT,\n    sentence  INT,\n    flesch    INT,\n    summary   TEXT,\n    title     TEXT,\n    author    TEXT,\n    date      TEXT,\n    txt       TEXT,\n    cache     TEXT,\n    pages     INT,\n    extension TEXT,\n    mime      TEXT,\n    genre     TEXT\n);'''
 	POS       = 'pos'
 	ENT       = 'ent'
 	WRD       = 'wrd'

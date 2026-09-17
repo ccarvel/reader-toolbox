@@ -20,6 +20,7 @@ class _FakeToken :
 		self.text   = text
 		self.lemma_ = text.lower()
 		self.pos_   = 'PROPN' if text[ :1 ].isupper() else 'NOUN'
+		self.tag_   = 'NNP' if text[ :1 ].isupper() else 'NN'
 
 
 class _FakeEntity :
