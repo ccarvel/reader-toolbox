@@ -1817,7 +1817,7 @@ def urls( carrel, select='url', count=False, like=None ) :
 			if like :
 
 				# articulate sql
-				sql  = '''SELECT DISTINCT( url ) AS url, COUNT( DISTINCT( url ) ) AS count
+				sql  = '''SELECT url, COUNT( * ) AS count
 				          FROM url
 				          WHERE url LIKE ?
 				          GROUP BY url
@@ -1828,7 +1828,7 @@ def urls( carrel, select='url', count=False, like=None ) :
 			else :
 
 				# articulate sql
-				sql  = '''SELECT DISTINCT( url ) AS url, COUNT( DISTINCT( url ) ) As count
+				sql  = '''SELECT url, COUNT( * ) AS count
 				          FROM url
 				          GROUP BY url
 				          ORDER BY count DESC;'''
@@ -1847,7 +1847,7 @@ def urls( carrel, select='url', count=False, like=None ) :
 			if like :
 
 				# articulate sql, search, and output
-				sql  = '''SELECT LOWER( DISTINCT( domain ) ) AS domain
+				sql  = '''SELECT DISTINCT LOWER( domain ) AS domain
 				          FROM url
 				          WHERE url LIKE ?
 				          ORDER BY domain;'''
@@ -1855,11 +1855,11 @@ def urls( carrel, select='url', count=False, like=None ) :
 
 			# no filtering
 			else :
-				sql  = 'SELECT LOWER( DISTINCT( domain ) ) AS domain FROM url ORDER BY domain;'
+				sql  = 'SELECT DISTINCT LOWER( domain ) AS domain FROM url ORDER BY domain;'
 				rows = connection.execute( sql )
 
 			# do the work and output
-			for row in rows : item.append( row[ 'domain' ] )
+			for row in rows : items.append( row[ 'domain' ] )
 		
 		# count and tabulate
 		else :
@@ -1868,7 +1868,7 @@ def urls( carrel, select='url', count=False, like=None ) :
 			if like :
 
 				# articulate sql, search, and output
-				sql  = '''SELECT LOWER( DISTINCT( domain ) ) AS domain, COUNT( LOWER( DISTINCT( domain ) ) ) AS count
+				sql  = '''SELECT LOWER( domain ) AS domain, COUNT( * ) AS count
 				          FROM url
 				          WHERE domain LIKE ?
 				          GROUP BY domain
@@ -1879,7 +1879,7 @@ def urls( carrel, select='url', count=False, like=None ) :
 			else :
 
 				# articulate sql, search, and output
-				sql  = '''SELECT LOWER( DISTINCT( domain ) ) AS domain, COUNT( LOWER( DISTINCT( domain ) ) ) AS count
+				sql  = '''SELECT LOWER( domain ) AS domain, COUNT( * ) AS count
 				          FROM url
 				          GROUP BY domain
 				          ORDER BY count DESC, domain;'''
