@@ -1722,20 +1722,21 @@ def addresses( carrel, count=False, like=None ) :
 
 		# articulate sql
 		if like :
-		
-			sql = ( '''SELECT DISTINCT( LOWER( address ) ) AS address
-			           FROM adr
-			           WHERE address LIKE "%s"
-			           ORDER BY address;''' % ('%' + like + '%' ) )
-			
+
+			sql  = '''SELECT DISTINCT( LOWER( address ) ) AS address
+			          FROM adr
+			          WHERE address LIKE ?
+			          ORDER BY address;'''
+			rows = connection.execute( sql, ( '%' + like + '%', ) )
+
 		else :
-		
+
 			sql  = '''SELECT DISTINCT( LOWER( address ) ) AS address
 			          FROM adr
 			          ORDER BY address;'''
+			rows = connection.execute( sql )
 
 		# do the work and build the result
-		rows = connection.execute( sql )
 		for row in rows : items.append( row[ 'address' ]  )
 
 	# count and tabulate the dump
@@ -1743,23 +1744,24 @@ def addresses( carrel, count=False, like=None ) :
 	
 		# articulate sql
 		if like :
-		
-			sql = ( '''SELECT LOWER( address ) AS address, COUNT( LOWER( address ) ) AS count
-			           FROM adr
-			           WHERE address LIKE "%s"
-			           GROUP BY LOWER( address )
-			           ORDER BY count DESC, address;''' % ('%' + like + '%' ) )
-			
+
+			sql  = '''SELECT LOWER( address ) AS address, COUNT( LOWER( address ) ) AS count
+			          FROM adr
+			          WHERE address LIKE ?
+			          GROUP BY LOWER( address )
+			          ORDER BY count DESC, address;'''
+			rows = connection.execute( sql, ( '%' + like + '%', ) )
+
 		else :
-		
+
 			sql  = '''SELECT LOWER( address ) AS address, COUNT( LOWER( address ) ) AS count
 			          FROM adr
 			          GROUP BY LOWER( address )
 			          ORDER BY count DESC, address;'''
+			rows = connection.execute( sql )
 
 		# do the work and build the result
-		rows = connection.execute( sql )
-		for row in rows : items.append( "\t".join( [ row[ 'address' ], str( row[ 'count' ] ) ] ) )		
+		for row in rows : items.append( "\t".join( [ row[ 'address' ], str( row[ 'count' ] ) ] ) )
 
 	# clean up and done
 	connection.close()
@@ -1792,18 +1794,20 @@ def urls( carrel, select='url', count=False, like=None ) :
 		
 			# simple filter
 			if like :
-			
+
 				# articulate sql
-				sql = ( '''SELECT DISTINCT( url ) AS url
-				           FROM url
-				           WHERE url LIKE "%s"
-				           ORDER BY url;''' % ( '%' + like + '%' ) )
+				sql  = '''SELECT DISTINCT( url ) AS url
+				          FROM url
+				          WHERE url LIKE ?
+				          ORDER BY url;'''
+				rows = connection.execute( sql, ( '%' + like + '%', ) )
 
 			# just dump; articulate sql
-			else : sql = 'SELECT DISTINCT( url ) AS url FROM url ORDER BY url;'
+			else :
+				sql  = 'SELECT DISTINCT( url ) AS url FROM url ORDER BY url;'
+				rows = connection.execute( sql )
 
 			# do the work and output
-			rows = connection.execute( sql )
 			for row in rows : items.append( row[ 'url' ] )
 
 		# count
@@ -1811,25 +1815,26 @@ def urls( carrel, select='url', count=False, like=None ) :
 		
 			# simple filtering
 			if like :
-			
+
 				# articulate sql
-				sql = ( '''SELECT DISTINCT( url ) AS url, COUNT( DISTINCT( url ) ) AS count
-				           FROM url
-				           WHERE url LIKE '%s'
-				           GROUP BY url
-				           ORDER BY count DESC;''' % ( '%' + like + '%' ) )
-				            
+				sql  = '''SELECT DISTINCT( url ) AS url, COUNT( DISTINCT( url ) ) AS count
+				          FROM url
+				          WHERE url LIKE ?
+				          GROUP BY url
+				          ORDER BY count DESC;'''
+				rows = connection.execute( sql, ( '%' + like + '%', ) )
+
 			# no filtering
 			else :
 
 				# articulate sql
-				sql = '''SELECT DISTINCT( url ) AS url, COUNT( DISTINCT( url ) ) As count
-				         FROM url
-				         GROUP BY url
-				         ORDER BY count DESC;'''
+				sql  = '''SELECT DISTINCT( url ) AS url, COUNT( DISTINCT( url ) ) As count
+				          FROM url
+				          GROUP BY url
+				          ORDER BY count DESC;'''
+				rows = connection.execute( sql )
 
 			# do the work and output
-			rows = connection.execute( sql )
 			for row in rows : items.append( "\t".join( [ row[ 'url' ], str( row[ 'count' ] ) ] ) )
 			
 	# domains; count and tabulate the dump
@@ -1840,18 +1845,20 @@ def urls( carrel, select='url', count=False, like=None ) :
 		
 			# filter
 			if like :
-			
+
 				# articulate sql, search, and output
-				sql = ( '''SELECT LOWER( DISTINCT( domain ) ) AS domain
-				           FROM url
-				           WHERE url LIKE '%s'
-				           ORDER BY domain;''' % ( '%' + like + '%' ) )
+				sql  = '''SELECT LOWER( DISTINCT( domain ) ) AS domain
+				          FROM url
+				          WHERE url LIKE ?
+				          ORDER BY domain;'''
+				rows = connection.execute( sql, ( '%' + like + '%', ) )
 
 			# no filtering
-			else : sql = 'SELECT LOWER( DISTINCT( domain ) ) AS domain FROM url ORDER BY domain;'
+			else :
+				sql  = 'SELECT LOWER( DISTINCT( domain ) ) AS domain FROM url ORDER BY domain;'
+				rows = connection.execute( sql )
 
 			# do the work and output
-			rows = connection.execute( sql )
 			for row in rows : item.append( row[ 'domain' ] )
 		
 		# count and tabulate
@@ -1859,25 +1866,26 @@ def urls( carrel, select='url', count=False, like=None ) :
 		
 			# filter
 			if like :
-			
+
 				# articulate sql, search, and output
-				sql = ( '''SELECT LOWER( DISTINCT( domain ) ) AS domain, COUNT( LOWER( DISTINCT( domain ) ) ) AS count
-				           FROM url
-				           WHERE domain LIKE '%s'
-				           GROUP BY domain
-				           ORDER BY count DESC, domain;''' % ( '%' + like + '%' ) )
+				sql  = '''SELECT LOWER( DISTINCT( domain ) ) AS domain, COUNT( LOWER( DISTINCT( domain ) ) ) AS count
+				          FROM url
+				          WHERE domain LIKE ?
+				          GROUP BY domain
+				          ORDER BY count DESC, domain;'''
+				rows = connection.execute( sql, ( '%' + like + '%', ) )
 
 			# no filtering
 			else :
-			
+
 				# articulate sql, search, and output
-				sql = '''SELECT LOWER( DISTINCT( domain ) ) AS domain, COUNT( LOWER( DISTINCT( domain ) ) ) AS count
-				         FROM url
-				         GROUP BY domain
-				         ORDER BY count DESC, domain;'''
-				         
+				sql  = '''SELECT LOWER( DISTINCT( domain ) ) AS domain, COUNT( LOWER( DISTINCT( domain ) ) ) AS count
+				          FROM url
+				          GROUP BY domain
+				          ORDER BY count DESC, domain;'''
+				rows = connection.execute( sql )
+
 			# do the work and output
-			rows = connection.execute( sql )
 			for row in rows : items.append( "\t".join( [ row[ 'domain' ], str( row[ 'count' ] ) ] ) )
 			
 	# clean up and done
@@ -2412,17 +2420,17 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 		if not count :
 
 			# articulate sql, search, and output
-			sql  = ( "SELECT pos FROM pos WHERE pos LIKE '%s';" % like )
-			rows = connection.execute( sql )
+			sql  = "SELECT pos FROM pos WHERE pos LIKE ?;"
+			rows = connection.execute( sql, ( like, ) )
 			for row in rows : items.append( row[ 'pos' ] )
 
 		# count and tabulate the dump
 		else :
-		
+
 			# articulate sql, search, and output
-			sql  = ( "SELECT pos, COUNT( pos ) AS count FROM pos WHERE pos LIKE '%s' GROUP BY pos ORDER BY count DESC;" % like )
-			rows = connection.execute( sql )
-			for row in rows : items.append( "\t".join( [ row[ 'pos' ], str( row[ 'count' ] ) ] ) )			
+			sql  = "SELECT pos, COUNT( pos ) AS count FROM pos WHERE pos LIKE ? GROUP BY pos ORDER BY count DESC;"
+			rows = connection.execute( sql, ( like, ) )
+			for row in rows : items.append( "\t".join( [ row[ 'pos' ], str( row[ 'count' ] ) ] ) )
 			
 	# words or lemmas
 	else : 
@@ -2439,11 +2447,11 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 		if not count :
 		
 			# build sql
-			if not normalize : sql = ( 'SELECT %s FROM pos WHERE pos LIKE "%s";' % ( select, like ) )
-			else : sql = ( 'SELECT LOWER( %s ) AS %s FROM pos WHERE pos LIKE "%s";' % ( select, select, like ) )
-						
+			if not normalize : sql = ( 'SELECT %s FROM pos WHERE pos LIKE ?;' % select )
+			else              : sql = ( 'SELECT LOWER( %s ) AS %s FROM pos WHERE pos LIKE ?;' % ( select, select ) )
+
 			# search and process each resulting row
-			rows = connection.execute( sql )
+			rows = connection.execute( sql, ( like, ) )
 			for row in rows : items.append( row[ select ] )
 		
 		# count and tabulate the result
@@ -2452,19 +2460,19 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 			# do not lower-case words or lemmas
 			if not normalize : sql = ( '''SELECT %s AS %s, COUNT( %s ) AS count
 			                              FROM pos
-			                              WHERE pos LIKE "%s"
+			                              WHERE pos LIKE ?
 			                              GROUP BY %s
-			                              ORDER BY count DESC;''' % ( select, select, select, like, select ) )
-				
+			                              ORDER BY count DESC;''' % ( select, select, select, select ) )
+
 			# lower-case words or lemmas
 			else: sql = ( '''SELECT LOWER( %s ) AS %s, COUNT( %s ) AS count
 			                 FROM pos
-			                 WHERE pos LIKE "%s"
+			                 WHERE pos LIKE ?
 			                 GROUP BY LOWER( %s )
-			                 ORDER BY count DESC;''' % ( select, select, select, like, select ) )
-				
+			                 ORDER BY count DESC;''' % ( select, select, select, select ) )
+
 			# search and process each resulting row
-			rows = connection.execute( sql )
+			rows = connection.execute( sql, ( like, ) )
 
 			# output simple tabulation
 			if not wordcloud :
@@ -2617,16 +2625,16 @@ def entities( carrel, localLibrary=None, select='type', like='any', count=False,
 		if not count :
 		
 			# build sql, search, and output
-			sql  = ( 'SELECT entity FROM ent WHERE type LIKE "%s";' % ( like ) )
-			rows = connection.execute( sql )
+			sql  = 'SELECT entity FROM ent WHERE type LIKE ?;'
+			rows = connection.execute( sql, ( like, ) )
 			for row in rows : items.append( row[ select ] )
-		
+
 		# count and tabulate the result
 		else:
 
 			# build sql, search, and output
-			sql  = ( 'SELECT entity, COUNT( entity ) AS count FROM ent WHERE type LIKE "%s" GROUP BY entity ORDER BY count DESC;' % ( like ) )
-			rows = connection.execute( sql )
+			sql  = 'SELECT entity, COUNT( entity ) AS count FROM ent WHERE type LIKE ? GROUP BY entity ORDER BY count DESC;'
+			rows = connection.execute( sql, ( like, ) )
 			
 			# output simple tabulation
 			if not wordcloud :
@@ -3374,7 +3382,7 @@ def search( carrel, localLibrary=None, query='love', output='human', refresh=Fal
 	'''output = csv|tsv|json|human|count'''
 
 	# configure
-	SQL = "SELECT id, author, title, date, summary, keyword, words, sentence, flesch, '##CACHE##' || cache AS cache, '##TXT##' || txt AS txt FROM indx WHERE indx MATCH '##QUERY##' ORDER BY RANK;"
+	SQL = "SELECT id, author, title, date, summary, keyword, words, sentence, flesch, '##CACHE##' || cache AS cache, '##TXT##' || txt AS txt FROM indx WHERE indx MATCH ? ORDER BY RANK;"
 
 	# configure
 	RESULTS = '\nYour search (##QUERY##) against the study carrel named "##CARREL##" returned ##COUNT## record(s):\n\n##RECORDS##'
@@ -3403,10 +3411,16 @@ def search( carrel, localLibrary=None, query='love', output='human', refresh=Fal
 	# build sql
 	sql = SQL.replace( '##CACHE##', cache )
 	sql = sql.replace( '##TXT##', txt )
-	sql = sql.replace( '##QUERY##', query )
 
-	# search
-	rows = pd.read_sql_query( sql, connection, index_col='id' )
+	# search; the query is bound, not interpolated, so it can't break
+	# the SQL statement itself. FTS5's own query grammar can still
+	# reject a malformed query (an unescaped apostrophe, for example),
+	# which surfaces here as a clean message instead of a traceback
+	try :
+		rows = pd.read_sql_query( sql, connection, index_col='id', params=( query, ) )
+	except ( sqlite3.OperationalError, pd.errors.DatabaseError ) as error :
+		sys.stderr.write( f"Error: invalid full text query ({ query }): { error }\n" )
+		exit()
 	
 	# output; csv
 	if output   == 'csv' : return( rows.to_csv() )
