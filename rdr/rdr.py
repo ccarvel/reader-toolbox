@@ -698,24 +698,28 @@ def cmdSizes( carrel, sort, output, save ) :
 # concordance
 @click.command( options_metavar='[<options>]' )
 @click.option('-w', '--width', default=40, help='number of characters on each side of <query>')
-@click.option('-q', '--query', default='love', help='a word, phrase, or regular expression')
+@click.option('-q', '--query', default='love', help='a word or phrase; a regular expression only if -r is also given')
+@click.option('-r', '--regex', is_flag=True, help='treat <query> as a regular expression instead of literal text')
+@click.option('-i', '--case-insensitive', 'caseInsensitive', is_flag=True, help='match <query> regardless of case')
 @click.argument( 'carrel', metavar='<carrel>' )
-def cmdConcordance( carrel, query, width ) :
+def cmdConcordance( carrel, query, width, regex, caseInsensitive ) :
 
 	"""A poor man's search engine
-	
-	Given a query, this subcommand will search <carrel> and return a list of results where each result is a set of words to the left of query, the query, and a set of words to the right of query -- a keyword-in-context index. This is useful for answering the question, "What words are used in the same breath as the given word?" The query can be a phrase, but it can not be a regular expression. Consider creating a word cloud from the output of this command to visualize the "words used in the same breath". 
-	
+
+	Given a query, this subcommand will search <carrel> and return a list of results where each result is a set of words to the left of query, the query, and a set of words to the right of query -- a keyword-in-context index. This is useful for answering the question, "What words are used in the same breath as the given word?" The query is matched as literal text by default (characters like '.', '(', or '|' are treated literally); pass -r to use it as a regular expression instead. Consider creating a word cloud from the output of this command to visualize the "words used in the same breath".
+
 	Examples:
-	
+
 	\b
 	  rdr concordance homer -q hector
 	  rdr concordance homer -q 'hector was'
+	  rdr concordance homer -q Hector -i
+	  rdr concordance homer -q 'hector|achilles' -r
 
 	See also: rdr ngrams --help"""
-	
+
 	# do the work
-	for line in concordance( carrel, query=query, width=width ) : click.echo( line )
+	for line in concordance( carrel, query=query, width=width, regex=regex, caseInsensitive=caseInsensitive ) : click.echo( line )
 
 
 # keywords

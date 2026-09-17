@@ -2044,7 +2044,7 @@ def keywords( carrel, localLibrary=None, count=False, wordcloud=False, save=Fals
 
 
 # poor man's search engine
-def concordance( carrel, localLibrary=None, query='love', width=40 ) :
+def concordance( carrel, localLibrary=None, query='love', width=40, regex=False, caseInsensitive=False ) :
 
 	'''Given the name of a study carrel, a query, and a window, return a
 	list of lines matching the query fro the given carrel'''
@@ -2053,22 +2053,29 @@ def concordance( carrel, localLibrary=None, query='love', width=40 ) :
 	import re
 	import rdr
 	from pathlib import Path
-	
+
 	# slurp up the corpus
 	if localLibrary : library = Path( localLibrary )
 	else            : library = rdr.configuration( 'localLibrary' )
-		
+
 	# sanity check
 	checkForCarrel( carrel, localLibrary )
-	
+
 	with open( library/carrel/rdr.ETC/rdr.CORPUS, encoding='utf-8'  ) as handle : corpus = handle.read()
 
 
 	# initialize
 	snippets = []
 
+	# escape the query unless the caller explicitly asked for regex (B2.9)
+	# -- a query with characters like '.', '(', or '|' used to be
+	# interpolated straight into the pattern and could break or match more
+	# than intended
+	pattern = query if regex else re.escape( query )
+	flags   = re.IGNORECASE if caseInsensitive else 0
+
 	# find and process all positions matching the query; finditer does the magic
-	matches = re.finditer( '\\b' + query + '\\b', corpus )
+	matches = re.finditer( '\\b' + pattern + '\\b', corpus, flags )
 	for match in matches :
 	
 		# re-initialize
