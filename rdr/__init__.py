@@ -201,9 +201,6 @@ Depending on how the carrel was computed against (modeled), there may be a numbe
   * index.txt - a bibliographic report in the form of a plain text
     file
 
-  * index.xml - a browsable interface to the study carrel; renders
-    much easier on the Web than on your local computer
-
   * index.zip - the whole study carrel compressed into a single
     file for the purposes of collaborating, sharing, and downloading
 
@@ -543,10 +540,8 @@ TEMPLATE = '''<?xml version="1.0" encoding="utf-8"?>
 			<li><a href="./index.txt">bibliographics (txt)</a> - authors, titles, dates, extents, summaries, and keywords in a simple human-readable form</li>
 			<li><a href="./index.json">bibliographics (JSON)</a> - same as the above but formatted as a JSON stream</li>
 			<li><a href="./index.zip">compressed</a>- the whole study carrel compressed into a single file for the purposes of collaboration, sharing, and downloading</li>
-			<li><a href="./index.xml">manifest</a> - a browsable interface to the study carrel</li>
 			<li><a href="./index.csv">metadata</a> - if the study carrel creation process was augmented with metadata values (authors, titles, dates, etc.) file, then that file is available here</li>
 			<li><a href="./index.gml">network graph</a> - a Graph Modeling Language file of the carrel's author(s), titles, and computed keywords, and it is useful for visualizing their relationships</li>
-			<li><a href="./etc/pathfinder.htm">pathfinder</a> - a stylized version of bibliographics (JSON) grouping the items into sections</li>
 			<li><a href="./index.tsv">provenance</a> - a very very rudimentary list of characateristics denoting whence the carrel came and when</li>
 			<li><a href="./index.rdf">semantic triples</a> - bibliographic characteristics encoded in the form of the Resource Description Framework, and intended for the purposes of supporting the Semantic Web</li> 
 			<li><a href="./index.htm">summary</a> - this file</li>
