@@ -14,7 +14,7 @@
 MODELDIR        = 'etc/topic-model'
 VECTORS         = 'model.vec'
 KEYS            = 'keys.tsv'
-KEYSHEADER      = [ 'ids', 'weights', 'features' ]
+KEYSHEADER      = [ 'ids', 'alpha', 'features' ]
 DOCUMENTS       = 'documents.txt'
 DOCUMENTSHEADER = [ 'ids', 'dids', 'files', 'proportions' ]
 TOPDOCS         = 100
@@ -37,7 +37,7 @@ def _makeSummary( keys, header ) :
 
 	# read and sort keys file
 	keys = pd.read_csv( keys, sep='\t', names=header )
-	keys.sort_values( by='weights', ascending=False, inplace=True )
+	keys.sort_values( by='alpha', ascending=False, inplace=True )
 
 	# create labels for each topic
 	labels = []
@@ -54,9 +54,11 @@ def _makeSummary( keys, header ) :
 			labels.append( feature )
 			break
 
-	# add the labels, rearrange (just for fun)
+	# add the labels, rearrange (just for fun); 'ids' is kept (not just for
+	# fun) so callers can align a topic's alpha-sorted row back to its
+	# original topic id, e.g. to look up its document-topic proportion (B2.7)
 	keys[ 'labels' ] = labels
-	keys = keys[ [ 'labels', 'weights', 'features' ] ]
+	keys = keys[ [ 'ids', 'labels', 'alpha', 'features' ] ]
 
 	# done
 	return keys
@@ -149,8 +151,8 @@ def _pivot( localLibrary, carrel, field, keys ) :
 	
 	# create more meaningful labels; initialize some more
 	keys = pd.read_csv( keys, sep='\t', names=KEYSHEADER )
-	keys.sort_values( by='weights', ascending=False, inplace=True )
-	
+	keys.sort_values( by='alpha', ascending=False, inplace=True )
+
 	# add labels, drop docId, and merge with metadata
 	topics   = pd.read_csv( str( localLibrary/carrel/MODELDIR/TOPICS ), sep='\t', names=labels )	
 	topics         = topics.drop( [ 'docId' ], axis=1 )
@@ -1437,9 +1439,17 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 				summary = _makeSummary( keys, KEYSHEADER )
 				click.echo( summary, err=True )
 
-				# visualize
-				summary[ 'topics' ] = summary[ 'weights' ].apply( lambda x : x * SCALE )
-				summary.plot( kind='pie', y='topics', autopct=PERCENTAGE, labels=summary[ 'labels' ], legend=False ) 
+				# visualize; slices are the MEAN document-topic proportion
+				# per topic (topics.tsv), not MALLET's per-topic alpha
+				# (keys.tsv) -- alpha is a Dirichlet prior-concentration
+				# parameter, not a share of the corpus (B2.7)
+				topicsFile  = str( localLibrary/carrel/MODELDIR/TOPICS )
+				proportions = pd.read_csv( topicsFile, sep='\t', header=None )
+				proportions = proportions.drop( columns=[ 0, 1 ] ).mean()
+				proportions.index = range( len( proportions ) )
+
+				summary[ 'topics' ] = summary[ 'ids' ].map( proportions ) * SCALE
+				summary.plot( kind='pie', y='topics', autopct=PERCENTAGE, labels=summary[ 'labels' ], legend=False )
 				plot.show()
 
 			# scatter
@@ -1461,7 +1471,7 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 				
 				# create more meaningful labels; initialize some more
 				keys = pd.read_csv( keys, sep='\t', names=KEYSHEADER )
-				keys.sort_values( by='weights', ascending=False, inplace=True )
+				keys.sort_values( by='alpha', ascending=False, inplace=True )
 
 				# add labels, and drop docId and file
 				topics.columns = labels
