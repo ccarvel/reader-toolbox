@@ -2619,7 +2619,7 @@ def entities( carrel, localLibrary=None, select='type', like='any', count=False,
 			
 		# initialize like
 		if like == 'any' : like = '%'
-		else             : like == like.upper()
+		else             : like = like.upper()
 		
 		# simply dump the desired content
 		if not count :
