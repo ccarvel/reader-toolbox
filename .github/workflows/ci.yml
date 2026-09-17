@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, 'b1-*', 'b2-*', 'b3-*' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-14 ]
+        python-version: [ '3.10', '3.11', '3.12' ]
+
+    runs-on: ${{ matrix.os }}
+
+    # a real Tika server, reachable at localhost:9998, for the
+    # session-scoped mini_carrel fixture (tests/conftest.py). Service
+    # containers only run on Linux runners; macOS runs Tika from the same
+    # JAR the toolbox itself downloads (see the "Start Tika (macOS)" step).
+    services:
+      tika:
+        image: apache/tika:latest
+        ports:
+          - 9998:9998
+        options: >-
+          --health-cmd "curl -f http://localhost:9998/ || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache spaCy models and NLTK data
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/spacy
+            ~/nltk_data
+          key: ${{ runner.os }}-py${{ matrix.python-version }}-spacy-nltk-v1
+
+      - name: Install reader-toolbox (editable) and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-nbmake
+
+      - name: Install spaCy models
+        run: |
+          python -m spacy download en_core_web_sm
+          python -m spacy download en_core_web_md
+
+      - name: Provision NLTK data
+        run: python -m nltk.downloader punkt_tab averaged_perceptron_tagger_eng wordnet stopwords
+
+      # Tika on macOS: no Docker service containers on macOS runners, so
+      # start the same tika-server.jar the toolbox downloads for itself.
+      - name: Start Tika (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          curl -sSL -o /tmp/tika-server.jar https://distantreader.org/apps/tika-server.jar
+          nohup java -jar /tmp/tika-server.jar > /tmp/tika.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:9998/ && break
+            sleep 3
+          done
+
+      - name: Run tests
+        env:
+          HOME: ${{ runner.temp }}
+        run: pytest reader-toolbox/tests -v
+        working-directory: .
+
+  # notebooks are not yet parameterized for a CI-sized carrel (Plan B5);
+  # this job is expected to fail until that lands, and is non-blocking
+  # (continue-on-error) so it doesn't turn the whole workflow red before
+  # B5 is done. Remove continue-on-error once B5 ships.
+  notebooks:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    services:
+      tika:
+        image: apache/tika:latest
+        ports:
+          - 9998:9998
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install reader-toolbox (editable) and nbmake
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-nbmake
+
+      - name: Install spaCy models and NLTK data
+        run: |
+          python -m spacy download en_core_web_sm
+          python -m spacy download en_core_web_md
+          python -m nltk.downloader punkt_tab averaged_perceptron_tagger_eng wordnet stopwords
+
+      - name: Run notebooks against the mini carrel
+        run: pytest --nbmake notebooks/ --nbmake-timeout=600
