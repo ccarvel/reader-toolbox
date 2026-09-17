@@ -96,7 +96,7 @@ def _checkForMallet( mallet ) :
 
 		# make mallet executable
 		click.echo( "\n  INFO: Making MALLET executable... " )
-		(malletHome/MALLETBIN).chmod( 0x755 )
+		(malletHome/MALLETBIN).chmod( 0o755 )
 
 		# done
 		click.echo('''
