@@ -420,9 +420,9 @@ def cmdRDFGraph( carrel, output, save ) :
 def cmdCatalog( human, location ) :
 
 	"""List study carrels
-	
-	Use this command to enumerate the study carrels cached locally or remotely available at http://library.distantreader.org. The remote option, by default, returns a tab-delimited stream very amenable to post processing with utilities such as cut, grep, sort, and less.
-	
+
+	Use this command to enumerate the study carrels cached locally or remotely available at http://library.distantreader.org. The remote option, by default, returns a tab-delimited stream very amenable to post processing with utilities such as cut, grep, sort, and less. The remote list has eleven columns: id, title, keywords, items, words, flesch, type, source, read, browse, and download.
+
 	Examples:
 	
 	\b
@@ -1012,6 +1012,8 @@ def cmdEdit( carrel ) :
 	'''Modify the stop word list of <carrel>
 
 When using subcommands such as ngrams or tm, you may observe words of no importance to your analysis. Iteratively use this subcommand to update the stop word list of <carrel> and ultimately remove those words from view. Change the value of your shell's EDITOR environment variable to define what text editor you want to use. Alternatively, you can use your graphical text editor to edit the ./etc/stopwords.txt file found in every study carrel. Just remember, you MUST save the changes as plain text (.txt), not .doc, docx, nor .rtf.
+
+A change to stopwords.txt is detected automatically (via its recorded signature in etc/cache.json) the next time semantics, grammars, sentences, or search runs, and that command's cache is rebuilt for you. ngrams and tm are not cached at all, so they always read the current stopwords.txt.
 
 Example: rdr edit homer'''
     
