@@ -1961,7 +1961,7 @@ def sizes( carrel, localLibrary=None, sort='words', output='list', save=False ) 
 	programmer interface. My bad.'''
 
 	# configure
-	WORDS   = 'SELECT id, words FROM bib ORDER BY words DESC'
+	WORDS   = 'SELECT id, words FROM bib ORDER BY CAST( words AS INTEGER ) DESC'
 	ID      = 'SELECT id, words FROM bib ORDER BY id ASC'
 	COLUMNS = [ 'sizes in words' ]
 	
@@ -2050,7 +2050,7 @@ def flesch( carrel, localLibrary=None, sort='score', output='list', save=False) 
 	programmer interface. My bad.'''
 
 	# configure
-	SCORE   = 'SELECT id, flesch FROM bib ORDER BY flesch DESC'
+	SCORE   = 'SELECT id, flesch FROM bib ORDER BY CAST( flesch AS INTEGER ) DESC'
 	ID      = 'SELECT id, flesch FROM bib ORDER BY id ASC'
 	COLUMNS = [ 'readability' ]
 	
@@ -4295,9 +4295,18 @@ def _tsv2db( directory, extension, table, connection ) :
 
 		# update
 		found = True
-		
+
 	# fill the database, conditionally
-	if found : features.to_sql( table, connection, if_exists='replace', index=False )
+	if found :
+
+		# cast known-numeric bib columns so ORDER BY sorts them
+		# numerically instead of lexicographically; existing carrels
+		# built before this fix are handled by the CAST(...AS INTEGER)
+		# in sizes()/flesch() instead of a migration
+		for column in ( 'words', 'sentence', 'flesch', 'pages' ) :
+			if column in features.columns : features[ column ] = pd.to_numeric( features[ column ], errors='coerce' )
+
+		features.to_sql( table, connection, if_exists='replace', index=False )
 
 
 def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
