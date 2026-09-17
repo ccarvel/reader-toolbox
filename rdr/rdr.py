@@ -1480,19 +1480,29 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 					topics.rename( columns = { column:label }, inplace=True )
 				
 				# rotate the topics and convert to array
-				topics = topics.T
-				topics = topics.to_numpy()
-				
-				# specify type of TSNE modeling, and then model
-				tsne   = TSNE( perplexity=1024, init='pca', learning_rate='auto' )
-				model  = tsne.fit_transform( topics )
-				
-				# plot
-				x = model[ :, 0 ]
-				y = model[ :, 1 ]
-				plot.scatter( x, y )
-				for i, label in enumerate( labels ) : plot.annotate( label, ( x[ i ], y[ i ] ) )
-				plot.show()
+				topics   = topics.T
+				topics   = topics.to_numpy()
+				n_topics = topics.shape[ 0 ]
+
+				# TSNE requires 0 < perplexity < n_samples (here, the
+				# number of topics); a hard-coded 1024 always failed
+				if n_topics < 3 :
+
+					click.echo( f"Error: scatter needs at least 3 topics to visualize (this carrel has { n_topics }). Rerun 'rdr tm' with a larger -t.", err=True )
+
+				else :
+
+					# specify type of TSNE modeling, and then model
+					perplexity = min( 30, n_topics - 1 )
+					tsne       = TSNE( perplexity=perplexity, init='pca', learning_rate='auto' )
+					model      = tsne.fit_transform( topics )
+
+					# plot
+					x = model[ :, 0 ]
+					y = model[ :, 1 ]
+					plot.scatter( x, y )
+					for i, label in enumerate( labels ) : plot.annotate( label, ( x[ i ], y[ i ] ) )
+					plot.show()
 				
 			if type == 'line' or type == 'bar' or type == 'barh' :
 			
