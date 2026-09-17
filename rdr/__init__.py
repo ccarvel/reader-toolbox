@@ -4138,13 +4138,13 @@ def _txt2bow( carrel, localLibrary=None ) :
 
 
 # _normalize text, a poor man's version
-def _normalize( text ) :
+def _normalize( text, lowercase=True ) :
 
 	# require
 	import re
-	
+
 	# _normalize the text in the bag-of-words
-	text = text.lower()
+	if lowercase : text = text.lower()
 	text = re.sub( r'\r', '\n', text )
 	text = re.sub( r'\n+', ' ', text )
 	text = re.sub( r'^\W+', '', text )
@@ -4227,7 +4227,7 @@ def _txt2ent( carrel, file, localLibrary=None ) :
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
-	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read() )
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
 
 	# model the text
 	nlp            = spacy.load( MODELMEDIUM )
@@ -4274,7 +4274,7 @@ def _txt2pos( carrel, file, localLibrary=None ) :
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
-	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read() )
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
 
 	# model the text
 	nlp            = spacy.load( MODELMEDIUM )
@@ -4326,10 +4326,13 @@ def _txt2url( carrel, file, localLibrary ) :
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
-	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read() )
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
 
 	# get and process each url, to the best of my ability
-	urls = re.findall( PATTERN, text )
+	# (case-insensitive: with lower-casing removed above, an upper-case
+	# scheme like "HTTPS://" would otherwise never match the lower-case
+	# literal "https?" and the url would be silently missed entirely)
+	urls = re.findall( PATTERN, text, re.IGNORECASE )
 	
 	# check for addresses
 	if len( urls ) > 0 :
@@ -4384,7 +4387,7 @@ def _txt2wrd( carrel, file, localLibrary=None ) :
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
-	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read() )
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
 
 	# model the text and get the keywords
 	nlp            = spacy.load( MODELMEDIUM )
