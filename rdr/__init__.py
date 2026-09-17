@@ -741,6 +741,33 @@ def graph2gml( carrel, output='gml', save=False, erase=False, localLibrary=None 
 
 
 # given the name of a carrel, output sentences
+def _ensureNLTKData() :
+
+	'''Download the NLTK data packages this toolbox depends on
+	(punkt_tab for tokenization, averaged_perceptron_tagger_eng for
+	POS tagging, wordnet for word-sense disambiguation) the first
+	time they're needed, with a stderr notice. Safe to call on every
+	invocation; already-installed packages are a cheap local check.'''
+
+	# require
+	import nltk
+	import sys
+
+	# configure
+	PACKAGES = { 'punkt_tab'                      : 'tokenizers/punkt_tab',
+				 'averaged_perceptron_tagger_eng' : 'taggers/averaged_perceptron_tagger_eng',
+				 'wordnet'                        : 'corpora/wordnet' }
+
+	# process each package; download only what is actually missing
+	for package, resource in PACKAGES.items() :
+
+		try    : nltk.data.find( resource )
+		except LookupError :
+
+			sys.stderr.write( f"INFO: Downloading NLTK data package '{ package }' (first use only)...\n" )
+			nltk.download( package, quiet=True )
+
+
 def sentences( carrel, process='list', query='love', save=True, refresh=False ) :
 
 	# configure
@@ -751,6 +778,9 @@ def sentences( carrel, process='list', query='love', save=True, refresh=False ) 
 	import rdr
 	import multiprocessing
 	from nltk.wsd import lesk
+
+	# make sure the NLTK data this function needs is available
+	_ensureNLTKData()
 
 	# configure
 	library   = configuration( 'localLibrary' )
@@ -2223,7 +2253,10 @@ def ngrams( carrel, localLibrary=None, size=1, query=None, count=False, location
 	from requests import get
 	import nltk
 	from pathlib import Path
-	
+
+	# make sure the NLTK data this function needs is available
+	_ensureNLTKData()
+
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
 
@@ -3117,6 +3150,9 @@ def checkForSemanticIndex( carrel, localLibrary, refresh=False ) :
 	from pathlib         import Path
 	import gensim
 	import sys
+
+	# make sure the NLTK data this function needs is available
+	_ensureNLTKData()
 
 	# configure
 	#localLibrary = configuration( 'localLibrary' )
