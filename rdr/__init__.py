@@ -3349,15 +3349,22 @@ def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=1
 		
 		# try to compute
 		try :
-		
-			positive = [ words[ 0 ], words[ 2 ] ]
-			negative = words[ 1 ]
+
+			# "w0 w1 w2" means "w0 is to w1 as w2 is to ?" -- the target is
+			# w1 - w0 + w2 (B2.6); "king queen prince" -> princess
+			positive = [ words[ 1 ], words[ 2 ] ]
+			negative = [ words[ 0 ] ]
 			items    = []
-			
+
 			similarities = model.most_similar( positive=positive, negative=negative, topn=topn )
-			#for similarity in similarities : print( similarity )
-			return( similarities )
-			
+			for similarity in similarities :
+
+				word  = similarity[ 0 ]
+				score = similarity[ 1 ]
+				items.append( '\t'.join( [ word, str( score ) ] ) )
+
+			return '\n'.join( items )
+
 		# error
 		except KeyError as word : sys.stderr.write( ( 'A word in your query -- %s -- is not in the index. Please remove it.\n' % word ) )
 
