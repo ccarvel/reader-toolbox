@@ -3761,7 +3761,7 @@ def _tikaIsRunning () :
 	
 	
 # create carrel skeleton
-def _initialize( carrel, directory, localLibrary=None ) :
+def _initialize( carrel, directory, localLibrary=None, profile='neutral' ) :
 	
 	# require
 	from datetime import datetime
@@ -3776,15 +3776,32 @@ def _initialize( carrel, directory, localLibrary=None ) :
 	TXT      = 'txt'
 	URLS     = 'urls'
 	WRD      = 'wrd'
-	WORDS    = '''journal\nresearch\nstudy\nhttps://doi.org\nthey\nnew\nuniversity\nfigure\ndoi\nvol\ninternational\nshe\nused\nonline\nstudent\npolitical\ndigital\nmay\nissue\ncultural\nblack\nwhite\none\ntwo\nthree\nafrican\namerican\nacademic\nsouth\nchinese\nnumber\nvolume\nmedical\nwriting\nlike\nsee\nfig\ncontent\nhttp\nhttps\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\na\na\nabout\nabove\nafter\nagain\nagainst\nall\nalso\nam\nan\nand\nany\nare\naren't\nas\nat\nb\nbe\nbecause\nbeen\nbefore\nbeing\nbelow\nbetween\nboth\nbut\nby\nc\ncan\ncan't\ncannot\ncould\ncouldn't\nd\ndid\ndidn't\ndo\ndoes\ndoesn't\ndoing\ndon't\ndown\nduring\ne\neach\nf\nfew\nfor\nfrom\nfurther\ng\nh\nhad\nhadn't\nhas\nhasn't\nhast\nhath\nhave\nhaven't\nhaving\nhe'd\nhe'll\nhe's\nher\nhere\nhere's\nhers\nherself\nhim\nhimself\nhis\nhow\nhow's\ni'd\ni'll\ni'm\ni've\nif\nin\ninto\nis\nisn't\nit\nit's\nits\nitself\nj\nk\nl\nlet's\nm\nme\nmore\nmost\nmustn't\nmy\nmyself\nn\nno\nnor\nnot\no\nof\noff\non\nonce\none\nonly\nor\nother\nought\nour\nours\nourselves\nout\nover\nown\np\nq\nr\ns\nsaid\nsame\nshan't\nshe'd\nshe'll\nshe's\nshould\nshouldn't\nso\nsome\nsuch\nt\nthan\nthat\nthat's\nthe\nthee\ntheir\ntheirs\nthem\nthemselves\nthen\nthere\nthere's\nthese\nthey'd\nthey'll\nthey're\nthey've\nthis\nthose\nthou\nthrough\nthus\nthy\nto\ntoo\nu\nunder\nuntil\nunto\nup\nupon\nv\nvery\nw\nwas\nwasn't\nwe'd\nwe'll\nwe're\nwe've\nwere\nweren't\nwhat\nwhat's\nwhen\nwhen's\nwhere\nwhere's\nwhich\nwhile\nwho\nwho's\nwhom\nwhy\nwhy's\nwill\nwith\nwon't\nwould\nwouldn't\nx\ny\nyou'd\nyou'll\nyou're\nyou've\nyour\nyours\nyourself\nyourselves\nz\n'''
+	# ACADEMIC is the original shipped stoplist (opt-in as of B2.2): it drops
+	# gendered pronouns asymmetrically (she/her/his/him/they/it, but not he/i)
+	# and drops ethnonym/color terms (black/white/african/american/chinese/...),
+	# which silently biases literary NER/frequency/topic/embedding results.
+	ACADEMIC = '''journal\nresearch\nstudy\nhttps://doi.org\nthey\nnew\nuniversity\nfigure\ndoi\nvol\ninternational\nshe\nused\nonline\nstudent\npolitical\ndigital\nmay\nissue\ncultural\nblack\nwhite\none\ntwo\nthree\nafrican\namerican\nacademic\nsouth\nchinese\nnumber\nvolume\nmedical\nwriting\nlike\nsee\nfig\ncontent\nhttp\nhttps\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\na\na\nabout\nabove\nafter\nagain\nagainst\nall\nalso\nam\nan\nand\nany\nare\naren't\nas\nat\nb\nbe\nbecause\nbeen\nbefore\nbeing\nbelow\nbetween\nboth\nbut\nby\nc\ncan\ncan't\ncannot\ncould\ncouldn't\nd\ndid\ndidn't\ndo\ndoes\ndoesn't\ndoing\ndon't\ndown\nduring\ne\neach\nf\nfew\nfor\nfrom\nfurther\ng\nh\nhad\nhadn't\nhas\nhasn't\nhast\nhath\nhave\nhaven't\nhaving\nhe'd\nhe'll\nhe's\nher\nhere\nhere's\nhers\nherself\nhim\nhimself\nhis\nhow\nhow's\ni'd\ni'll\ni'm\ni've\nif\nin\ninto\nis\nisn't\nit\nit's\nits\nitself\nj\nk\nl\nlet's\nm\nme\nmore\nmost\nmustn't\nmy\nmyself\nn\nno\nnor\nnot\no\nof\noff\non\nonce\none\nonly\nor\nother\nought\nour\nours\nourselves\nout\nover\nown\np\nq\nr\ns\nsaid\nsame\nshan't\nshe'd\nshe'll\nshe's\nshould\nshouldn't\nso\nsome\nsuch\nt\nthan\nthat\nthat's\nthe\nthee\ntheir\ntheirs\nthem\nthemselves\nthen\nthere\nthere's\nthese\nthey'd\nthey'll\nthey're\nthey've\nthis\nthose\nthou\nthrough\nthus\nthy\nto\ntoo\nu\nunder\nuntil\nunto\nup\nupon\nv\nvery\nw\nwas\nwasn't\nwe'd\nwe'll\nwe're\nwe've\nwere\nweren't\nwhat\nwhat's\nwhen\nwhen's\nwhere\nwhere's\nwhich\nwhile\nwho\nwho's\nwhom\nwhy\nwhy's\nwill\nwith\nwon't\nwould\nwouldn't\nx\ny\nyou'd\nyou'll\nyou're\nyou've\nyour\nyours\nyourself\nyourselves\nz\n'''
+	# NEUTRAL is the default as of B2.2 (operator decision, .relay/decisions.md
+	# ADR-001): the standard NLTK English stopwords corpus, with every personal
+	# pronoun/possessive/reflexive form (he, she, it, they, i, we, you, and
+	# their possessive/reflexive/contraction variants) removed so no pronoun --
+	# gendered or otherwise -- is ever silently dropped from frequency/topic/
+	# embedding results. Carries no domain jargon or ethnonym/color terms.
+	NEUTRAL  = '''a\nabout\nabove\nafter\nagain\nagainst\nain\nall\nam\nan\nand\nany\nare\naren\naren't\nas\nat\nbe\nbecause\nbeen\nbefore\nbeing\nbelow\nbetween\nboth\nbut\nby\ncan\ncouldn\ncouldn't\nd\ndid\ndidn\ndidn't\ndo\ndoes\ndoesn\ndoesn't\ndoing\ndon\ndon't\ndown\nduring\neach\nfew\nfor\nfrom\nfurther\nhad\nhadn\nhadn't\nhas\nhasn\nhasn't\nhave\nhaven\nhaven't\nhaving\nhere\nhow\nif\nin\ninto\nis\nisn\nisn't\njust\nll\nm\nma\nmightn\nmightn't\nmore\nmost\nmustn\nmustn't\nneedn\nneedn't\nno\nnor\nnot\nnow\no\nof\noff\non\nonce\nonly\nor\nother\nout\nover\nown\nre\ns\nsame\nshan\nshan't\nshould\nshould've\nshouldn\nshouldn't\nso\nsome\nsuch\nt\nthan\nthat\nthat'll\nthe\nthen\nthere\nthese\nthis\nthose\nthrough\nto\ntoo\nunder\nuntil\nup\nve\nvery\nwas\nwasn\nwasn't\nwere\nweren\nweren't\nwhat\nwhen\nwhere\nwhich\nwhile\nwho\nwhom\nwhy\nwill\nwith\nwon\nwon't\nwouldn\nwouldn't\ny\n'''
+	PROFILES = { 'neutral' : NEUTRAL, 'academic' : ACADEMIC }
 	PROCESS  = 'toolbox'
 
 	# require
 	from   datetime import datetime
 	from   getpass  import getuser
 	from   pathlib  import Path
+	import hashlib
 	import shutil
-	
+
+	# select the stopword profile (B2.2); unknown values fall back to neutral
+	words          = PROFILES.get( profile, NEUTRAL )
+	wordsSHA256    = hashlib.sha256( words.encode( 'utf-8' ) ).hexdigest()
+
 	# create the library, the carrel, and the carrel's sub-directories
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
@@ -3808,7 +3825,7 @@ def _initialize( carrel, directory, localLibrary=None ) :
 	timeCreated = datetime.now().strftime("%H:%M")
 	creator     = getuser()
 	input       = directory
-	record      = [ PROCESS, originalID, dateCreated, timeCreated, creator, input ]
+	record      = [ PROCESS, originalID, dateCreated, timeCreated, creator, input, profile, wordsSHA256 ]
 	output      = localLibrary/carrel/PROVENANCE
 	with open( output, 'w', encoding='utf-8' ) as handle : handle.write( '\t'.join( record ) + '\n' )
 	
@@ -3831,7 +3848,7 @@ def _initialize( carrel, directory, localLibrary=None ) :
 
 	# add stop words; there is probably a better way
 	output = localLibrary/carrel/ETC/STOPWORDS
-	with open( output, 'w', encoding='utf-8' ) as handle : handle.write( WORDS )
+	with open( output, 'w', encoding='utf-8' ) as handle : handle.write( words )
 
 	# add readme
 	output      = localLibrary/carrel/READMEFILE
@@ -4499,7 +4516,7 @@ def _tsv2db( directory, extension, table, connection ) :
 		features.to_sql( table, connection, if_exists='replace', index=False )
 
 
-def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
+def build( carrel, directory, erase=False, start=False, localLibrary=None, profile='neutral' ) :
 
 	"""Create <carrel> from files in <directory>
 
@@ -4600,7 +4617,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 
 	# build skeleton
 	click.echo( '(Step #1 of 9) Initializing %s with %s and stop words' % ( carrel, directory ), err=True )
-	_initialize( carrel, directory, localLibrary )
+	_initialize( carrel, directory, localLibrary, profile )
 		
 	# create a list of filenames to process
 	filenames = []
