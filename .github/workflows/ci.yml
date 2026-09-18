@@ -127,12 +127,14 @@ jobs:
       # digging further -- remove once root-caused.
       - name: Diagnostic -- mini carrel row counts
         run: |
-          sqlite3 "$HOME/reader-library/mini/etc/carrel.db" \
-            "select 'bib', count(*) from bib union all
-             select 'wrd', count(*) from wrd union all
-             select 'ent', count(*) from ent union all
-             select 'pos', count(*) from pos;"
-          wc -l "$HOME"/reader-library/mini/ent/*.ent "$HOME"/reader-library/mini/pos/*.pos "$HOME"/reader-library/mini/wrd/*.wrd
+          echo "HOME=$HOME"
+          find "$HOME/reader-library/mini" -type f | sort
+          echo "--- index.tsv ---"
+          cat "$HOME/reader-library/mini/index.tsv" || true
+          echo "--- cache/ input files ---"
+          ls -la "$HOME/reader-library/mini/cache/" || true
+          echo "--- bib table ---"
+          sqlite3 "$HOME/reader-library/mini/etc/carrel.db" "select * from bib;" || true
 
       - name: Run notebooks against the mini carrel
         run: pytest --nbmake notebooks/ --nbmake-timeout=600
