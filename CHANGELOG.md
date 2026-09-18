@@ -29,7 +29,8 @@ directly with tested lower bounds instead of arriving transitively;
 `tests/` suite (dependent on a never-shipped `test-carrel` fixture)
 replaced with a real, committed 3-file mini corpus and a session-scoped
 build fixture; `CHANGELOG.md` added; a GitHub Actions CI matrix added
-(macOS arm64 + Ubuntu × Python 3.10–3.12).
+(macOS arm64 + Ubuntu × Python 3.11–3.12; 3.10 was dropped after the
+first real CI run showed `matplotlib>=3.11.2` has no 3.10 wheel).
 
 **Documentation (B4):** `commands.rst` now generated from live `--help`
 via `sphinx-click` so it can't drift again; `structure.rst` regenerated

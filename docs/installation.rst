@@ -1,7 +1,7 @@
 Installation
 ============
 
-The Reader Toolbox is a suite of Python scripts integrated into a single command-line interface, ``rdr``. It targets Python 3.10-3.12.
+The Reader Toolbox is a suite of Python scripts integrated into a single command-line interface, ``rdr``. It targets Python 3.11-3.12; a lower dependency floor (``matplotlib>=3.11.2``) has no Python 3.10 wheel, so 3.10 isn't supported.
 
 Two external, non-Python tools are required before you build your first carrel:
 

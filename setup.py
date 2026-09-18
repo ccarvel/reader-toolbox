@@ -10,6 +10,7 @@ license_files=["LICENSE"],
     name='reader-toolbox',
     packages=find_packages(),
     include_package_data=True,
+    python_requires='>=3.11',
 	install_requires=[
 		'catalogue>=2.0.10',
 		'click>=8.5.0',
