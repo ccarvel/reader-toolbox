@@ -14,7 +14,7 @@
 MODELDIR        = 'etc/topic-model'
 VECTORS         = 'model.vec'
 KEYS            = 'keys.tsv'
-KEYSHEADER      = [ 'ids', 'weights', 'features' ]
+KEYSHEADER      = [ 'ids', 'alpha', 'features' ]
 DOCUMENTS       = 'documents.txt'
 DOCUMENTSHEADER = [ 'ids', 'dids', 'files', 'proportions' ]
 TOPDOCS         = 100
@@ -37,7 +37,7 @@ def _makeSummary( keys, header ) :
 
 	# read and sort keys file
 	keys = pd.read_csv( keys, sep='\t', names=header )
-	keys.sort_values( by='weights', ascending=False, inplace=True )
+	keys.sort_values( by='alpha', ascending=False, inplace=True )
 
 	# create labels for each topic
 	labels = []
@@ -54,9 +54,11 @@ def _makeSummary( keys, header ) :
 			labels.append( feature )
 			break
 
-	# add the labels, rearrange (just for fun)
+	# add the labels, rearrange (just for fun); 'ids' is kept (not just for
+	# fun) so callers can align a topic's alpha-sorted row back to its
+	# original topic id, e.g. to look up its document-topic proportion (B2.7)
 	keys[ 'labels' ] = labels
-	keys = keys[ [ 'labels', 'weights', 'features' ] ]
+	keys = keys[ [ 'ids', 'labels', 'alpha', 'features' ] ]
 
 	# done
 	return keys
@@ -149,8 +151,8 @@ def _pivot( localLibrary, carrel, field, keys ) :
 	
 	# create more meaningful labels; initialize some more
 	keys = pd.read_csv( keys, sep='\t', names=KEYSHEADER )
-	keys.sort_values( by='weights', ascending=False, inplace=True )
-	
+	keys.sort_values( by='alpha', ascending=False, inplace=True )
+
 	# add labels, drop docId, and merge with metadata
 	topics   = pd.read_csv( str( localLibrary/carrel/MODELDIR/TOPICS ), sep='\t', names=labels )	
 	topics         = topics.drop( [ 'docId' ], axis=1 )
@@ -418,9 +420,9 @@ def cmdRDFGraph( carrel, output, save ) :
 def cmdCatalog( human, location ) :
 
 	"""List study carrels
-	
-	Use this command to enumerate the study carrels cached locally or remotely available at http://library.distantreader.org. The remote option, by default, returns a tab-delimited stream very amenable to post processing with utilities such as cut, grep, sort, and less.
-	
+
+	Use this command to enumerate the study carrels cached locally or remotely available at http://library.distantreader.org. The remote option, by default, returns a tab-delimited stream very amenable to post processing with utilities such as cut, grep, sort, and less. The remote list has eleven columns: id, title, keywords, items, words, flesch, type, source, read, browse, and download.
+
 	Examples:
 	
 	\b
@@ -469,8 +471,8 @@ def cmdSemantics( carrel, type, query, size, refresh=False ) :
 	'''Apply semantic indexing against <carrel>
 	
 	Sometimes called "word embedding", use this subcommand to learn: 1) what words are similar to a given word, 2) how close in meaning sets of words are, or 3) what words compare to three other words. In order to work accurately, semantic indexing requires larger rather than smaller corpora; results from corpora less than 1,500,000 words in size ought to be considered dubious at best.
-	
-	This command requires a Python module called "word2vec", which is not installed by default. This is because the module needs to be compiled and doing so on Windows computers is challenging. Linux and Macintosh users can probably do 'pip install word2vec', but Windows users will have to go through additional hoops. But please be consoled when you remember that corpora less than 1.5 million words do not return accurate results. Is <carrel> 1.5 million words long?
+
+	This command is backed by gensim's Word2Vec implementation, a declared dependency installed automatically with the Toolbox -- no separate compilation step is required on any platform. The -t distance query outputs one pair of columns per queried word: that word and its distance from the first word in -q. Please remember that corpora less than 1.5 million words do not return accurate results. Is <carrel> 1.5 million words long?
 	
 	Examples:
 	
@@ -696,24 +698,28 @@ def cmdSizes( carrel, sort, output, save ) :
 # concordance
 @click.command( options_metavar='[<options>]' )
 @click.option('-w', '--width', default=40, help='number of characters on each side of <query>')
-@click.option('-q', '--query', default='love', help='a word, phrase, or regular expression')
+@click.option('-q', '--query', default='love', help='a word or phrase; a regular expression only if -r is also given')
+@click.option('-r', '--regex', is_flag=True, help='treat <query> as a regular expression instead of literal text')
+@click.option('-i', '--case-insensitive', 'caseInsensitive', is_flag=True, help='match <query> regardless of case')
 @click.argument( 'carrel', metavar='<carrel>' )
-def cmdConcordance( carrel, query, width ) :
+def cmdConcordance( carrel, query, width, regex, caseInsensitive ) :
 
 	"""A poor man's search engine
-	
-	Given a query, this subcommand will search <carrel> and return a list of results where each result is a set of words to the left of query, the query, and a set of words to the right of query -- a keyword-in-context index. This is useful for answering the question, "What words are used in the same breath as the given word?" The query can be a phrase, but it can not be a regular expression. Consider creating a word cloud from the output of this command to visualize the "words used in the same breath". 
-	
+
+	Given a query, this subcommand will search <carrel> and return a list of results where each result is a set of words to the left of query, the query, and a set of words to the right of query -- a keyword-in-context index. This is useful for answering the question, "What words are used in the same breath as the given word?" The query is matched as literal text by default (characters like '.', '(', or '|' are treated literally); pass -r to use it as a regular expression instead. Consider creating a word cloud from the output of this command to visualize the "words used in the same breath".
+
 	Examples:
-	
+
 	\b
 	  rdr concordance homer -q hector
 	  rdr concordance homer -q 'hector was'
+	  rdr concordance homer -q Hector -i
+	  rdr concordance homer -q 'hector|achilles' -r
 
 	See also: rdr ngrams --help"""
-	
+
 	# do the work
-	for line in concordance( carrel, query=query, width=width ) : click.echo( line )
+	for line in concordance( carrel, query=query, width=width, regex=regex, caseInsensitive=caseInsensitive ) : click.echo( line )
 
 
 # keywords
@@ -726,7 +732,7 @@ def cmdWrd( carrel, count, wordcloud, save ) :
 
 	"""Filter statistically computed keywords from <carrel>
 
-	Use this subcommand to address the question, "What is <carrel> about?" Algorithms akin to the venerable TF/IDF and Google's PageRank were used against each item in <carrel> to extract statistically significant keywords (think "subject terms"). These words were saved in files in the wrd directory of <carrel>, and they have been saved to a relational database as well. This command queries that database. The results of this command help you describe the "aboutness" of <carrel> and the keywords can be used to increase precision/recall when doing full text searches. Consider also the use of the resulting keywords as input to the concordance subcommand.
+	Use this subcommand to address the question, "What is <carrel> about?" YAKE (Yet Another Keyword Extractor), a statistical, corpus-independent algorithm, was applied to each item in <carrel> to extract significant keywords (think "subject terms"). Because YAKE scores each document on its own, without contrasting it against the rest of the corpus, these are not corpus-relative "keyness" scores the way a TF-IDF comparison would be. These words were saved in files in the wrd directory of <carrel>, and they have been saved to a relational database as well. This command queries that database. The results of this command help you describe the "aboutness" of <carrel> and the keywords can be used to increase precision/recall when doing full text searches. Consider also the use of the resulting keywords as input to the concordance subcommand.
 
 	Examples:
 
@@ -1006,6 +1012,8 @@ def cmdEdit( carrel ) :
 	'''Modify the stop word list of <carrel>
 
 When using subcommands such as ngrams or tm, you may observe words of no importance to your analysis. Iteratively use this subcommand to update the stop word list of <carrel> and ultimately remove those words from view. Change the value of your shell's EDITOR environment variable to define what text editor you want to use. Alternatively, you can use your graphical text editor to edit the ./etc/stopwords.txt file found in every study carrel. Just remember, you MUST save the changes as plain text (.txt), not .doc, docx, nor .rtf.
+
+A change to stopwords.txt is detected automatically (via its recorded signature in etc/cache.json) the next time semantics, grammars, sentences, or search runs, and that command's cache is rebuilt for you. ngrams and tm are not cached at all, so they always read the current stopwords.txt.
 
 Example: rdr edit homer'''
     
@@ -1437,9 +1445,17 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 				summary = _makeSummary( keys, KEYSHEADER )
 				click.echo( summary, err=True )
 
-				# visualize
-				summary[ 'topics' ] = summary[ 'weights' ].apply( lambda x : x * SCALE )
-				summary.plot( kind='pie', y='topics', autopct=PERCENTAGE, labels=summary[ 'labels' ], legend=False ) 
+				# visualize; slices are the MEAN document-topic proportion
+				# per topic (topics.tsv), not MALLET's per-topic alpha
+				# (keys.tsv) -- alpha is a Dirichlet prior-concentration
+				# parameter, not a share of the corpus (B2.7)
+				topicsFile  = str( localLibrary/carrel/MODELDIR/TOPICS )
+				proportions = pd.read_csv( topicsFile, sep='\t', header=None )
+				proportions = proportions.drop( columns=[ 0, 1 ] ).mean()
+				proportions.index = range( len( proportions ) )
+
+				summary[ 'topics' ] = summary[ 'ids' ].map( proportions ) * SCALE
+				summary.plot( kind='pie', y='topics', autopct=PERCENTAGE, labels=summary[ 'labels' ], legend=False )
 				plot.show()
 
 			# scatter
@@ -1461,7 +1477,7 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 				
 				# create more meaningful labels; initialize some more
 				keys = pd.read_csv( keys, sep='\t', names=KEYSHEADER )
-				keys.sort_values( by='weights', ascending=False, inplace=True )
+				keys.sort_values( by='alpha', ascending=False, inplace=True )
 
 				# add labels, and drop docId and file
 				topics.columns = labels
@@ -1561,13 +1577,15 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 @click.argument( 'directory', metavar='<directory>' )
 @click.option('-e', '--erase', is_flag=True, help='delete pre-existing carrel')
 @click.option('-s', '--start', is_flag=True, help='start Tika')
-def cmdBuild( carrel, directory, erase, start ) :
+@click.option('-p', '--profile', type=click.Choice( [ 'neutral', 'academic' ] ), default='neutral', help='stopword profile (default: neutral)')
+@click.option('-j', '--jobs', type=int, default=None, help='worker processes (default: CPU count)')
+def cmdBuild( carrel, directory, erase, start, profile, jobs ) :
 
 	"""Create <carrel> from files in <directory>
 
 Use this command to build a data set ("study carrel") based on the files saved in a directory. Once the data set is created the other Toolbox commands can be applied to the result. The files can be of any type (PDF, Microsoft Word, HTML, etc.), and they can be of any kind (books, articles, reports, etc.), and they can be of any number (1, 2, 12, a few dozen, hundreds, etc.). The Toolbox is designed to read about a dozen journal articles in the form of PDF files. This command requires a Java tool called Tika, and it is used to convert the input files into plain text as well as extract authors, titles, and dates. If the Toolbox has not been configured and/or Tika is not installed, then the Toolbox will try to install it on your behalf. If the given directory contains a file named 'metadata.csv', then this command will use the file as the source of author, title, and date metadata values. This is often very helpful because sans metadata it is very difficult to make comparison between documents. Please see the full-blown documentation for details."""
 
-	build( carrel, directory, erase, start, None )
+	build( carrel, directory, erase, start, None, profile, jobs )
 
 #@click.command()
 #def cmdServer() :

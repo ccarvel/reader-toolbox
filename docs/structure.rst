@@ -3,11 +3,11 @@ Structure of a carrel
 
 It can not be stated strongly enough, *the Distant Reader Toolbox takes a set of unstructured data (files of narrative text) as input, and it outputs a set of structured data -- a "study carrel" -- intended to be computed against.*
 
-Each study carrel is a data set, and like other all other data sets, they are purposely designed to address research questions. Once you understand the strucuture and content of study carrels, you will be able to address research questions not explicitly addressed by the various Toolbox commands and functions. Thus, the purpose of this section is to explicitly outline the types of content a study carrel contains as well as how the data is origanized so you can address more interesting research questions.
+Each study carrel is a data set, and like all other data sets, they are purposely designed to address research questions. Once you understand the structure and content of study carrels, you will be able to address research questions not explicitly addressed by the various Toolbox commands and functions.
 
-First and foremost, the vast majority of the files in a study carrel are plain text files. The only files you can not open and make sense with in your text editor are the various images files found in the figures directory and the SQLite relational database file (reader.db) found in the etc directory. Consequently, given any study carrel, the student, researcher, or scholar can compute against it (ask it questions) using a myriad of applications or programming languages. The most obvious applications include any spreadsheet or database application. Specific examples include OpenRefine for tabular data analysis, Wordle for creating word clouds, AntConc for concordancing, Gephi for network analysis and visualization, or Topic Modeling Tool for topic modeling. Since most of the data contained in a study carrel is tabular in nature -- meaning it is constituted in the form of rows and columns -- study carrel content can be read by any programming language (R, Python, C, Java, Ruby, Bash, etc.) and computed against in the manner of other data science techniques. The unstructured plain text files found in every carrel (such as all the files found in the the txt directory or the reader.txt file found in the etc directory) are computable as well, but the techqiues fall more into the category of natural language processing and less into traditional data science.
+First and foremost, the vast majority of the files in a study carrel are plain text files. The only files you can not open and make sense of in your text editor are the various image files found in the ``figures`` directory and the SQLite relational database file (``carrel.db``) found in the ``etc`` directory. Consequently, given any study carrel, the student, researcher, or scholar can compute against it (ask it questions) using a myriad of applications or programming languages: any spreadsheet or database application, OpenRefine for tabular data analysis, Wordle for word clouds, AntConc for concordancing, Gephi for network analysis and visualization, or Topic Modeling Tool for topic modeling.
 
-Second, each study carrel is contained in a single directory with a number of consistently named subdirectories and files, as the following list illustrates:
+Second, each study carrel is contained in a single directory with the following consistently named subdirectories and files:
 
   * adr
   * bib
@@ -15,26 +15,27 @@ Second, each study carrel is contained in a single directory with a number of co
   * ent
   * etc
   * figures
+  * index.csv
+  * index.htm
+  * index.tsv
   * pos
-  * provenance.tsv
+  * readme.txt
   * txt
   * urls
-  * wrd    
+  * wrd
 
-The following sections describe the type of content found in each subdirectory and outlines ways it can be used.
+The following sections describe the type of content found in each directory and file.
 
 adr
 ---
 
 Email addresses
 
-This subdirectory contains a set of tab-delimited files. Each file contains a set of email addresses extracted from the documents in your corpus. While the files' names end in .adr, they are plain text files that can be imported into for favorite spreadsheet, database, or analysis application. The files have two columns:
+This subdirectory contains a set of tab-delimited files, one per document. Each file's name ends in ``.adr``, and the files have two columns:
 
-   1. **id** - the unique identifer of a document in the carrel
+   1. **id** - the unique identifier of a document in the carrel
 
    2. **address** - an email address
-   
-The files in this directory can humorously answer the question "Who are you gonna call?", but you might also use it to learn who might be commonly mentioned across your carrel.
 
 
 bib
@@ -42,153 +43,185 @@ bib
 
 Bibliographics
 
-This subdirectory contains a set of tab-delimited files. Each file contains a set of rudimentary bibliographic information from a given document in your corpus. While the files' names end in .bib, they are plain text files that can be imported into for favorite spreadsheet, database, or analysis application. The files have thirteen columns: 
+This subdirectory contains a set of tab-delimited files, one per document, named with a ``.bib`` extension. The files have thirteen columns:
 
-   1. **id** - the unique identifer of a document in the carrel; this value is rooted in the name of the original document sans its extension
+   1. **id** - the unique identifier of the document; rooted in the name of the original file sans its extension
 
-   2. **author** - the name(s) of the creators of the document; this value comes from the optionally included metadata.csv file when the carrel was created, or it is extracted from the original document by the Tika server, or this value will be empty
+   2. **author** - the name(s) of the creator(s) of the document; from an optional ``metadata.csv`` file supplied at build time, or extracted from the original document by the Tika server, or empty
 
-   3. **title** - the title of the document; this value comes from the optionally included metadata.csv file when the carrel was created, or it extracted from the original document by the Tika server, or it is the name of the original file sans the file's extension 
+   3. **title** - the title of the document; from ``metadata.csv``, extracted by Tika, or the original filename sans extension
 
-   4. **date** - the date of the document; this value comes from the optionally included metadata.csv file when the carrel was created, or it extracted from the original document by the Tika server, or this value will be empty
+   4. **date** - the date of the document; from ``metadata.csv``, extracted by Tika, or empty
 
-   5. **page** - 
- 
-   6. **extension**
+   5. **pages** - the number of pages Tika reports for the original document, when the format has a notion of pages
 
-   7. **mime**
+   6. **extension** - the original file's extension (``.pdf``, ``.docx``, etc.)
 
-   8. **words**
+   7. **mime** - the MIME type Tika detected for the original file
 
-   9. **sentences**
+   8. **words** - the number of words in the document
 
-   10. **flesch**
+   9. **sentence** - the number of sentences in the document
 
-   11. **summary**
+   10. **flesch** - the document's Flesch reading-ease score, an integer where values closer to 100 are easier to read
 
-   12. **cache**
+   11. **summary** - a computed extractive summary of the document
 
-   13. **txt**
+   12. **cache** - the path, relative to the carrel, of the original file in ``cache/``
 
-These files help answer the question "What items are in my corpus, and how can they be described?"
+   13. **txt** - the path, relative to the carrel, of the plain-text version of the file in ``txt/``
+
+The underlying ``bib`` table also has a fourteenth column, **genre**, declared in the schema but populated only when a ``metadata.csv`` file supplies a ``genre`` value at build time; otherwise it is empty.
 
 
 cache
 -----
 
-Original Input Files
+Original input files
 
-This subdirectory contains original copies of the files you intended for analysis. It is populated by harvesting content from URLs or were supplied in the zip file you uploaded to the Reader. Each file is named with a unique and somewhat meaningful name and an extension. These files are intended for reading on your computer, or better yet, printed and then read in the more traditional manner.
+This subdirectory contains original copies of the files given for analysis, named with a unique and somewhat meaningful name and extension. These files are intended for reading on your computer, or printed and read in the traditional manner.
 
 
 ent
 ---
 
-Named Entities
+Named entities
 
-This subdirectory contains a set of tab-delimited files, and each file contains a set of named entities from a given document in your corpus. While the files' names end in .ent, they are plain text files that can be imported into for favorite spreadsheet, database, or analysis application. The files have five columns:
+This subdirectory contains a set of tab-delimited files, one per document, named with a ``.ent`` extension. The files have five columns:
 
-   1. **id** - the unique identifer of a document in the carrel
+   1. **id** - the unique identifier of the document
 
-   2. **sid**
+   2. **sid** - the sentence number (0-indexed) the entity occurs in, per spaCy's sentence segmentation of that document
 
-   3. **eid**
+   3. **eid** - the entity's position (0-indexed) among the entities extracted from that document
 
-   4. **entity**
+   4. **entity** - the entity text, in its original case (see :doc:`limitations`)
 
-   5. **type**
-
-These files help answer questions regarding who, what, when, where, how, and how many.
+   5. **type** - the entity's spaCy label (``PERSON``, ``GPE``, ``ORG``, etc.)
 
 
 etc
 ---
 
-Miscellaneous
+Miscellaneous and derived files
 
-This subdirectory contains a set of ancillary files, and each are described below:
- 
-   1. **reader.db**
+This directory holds the carrel's database, corpus file, stopword list, and every lazily-computed cache. None of these files exist until the command that produces them is first run, except ``carrel.db``, ``carrel.txt``, and ``stopwords.txt``, which ``build`` always creates.
 
-   2. **reader.txt**
+   1. **carrel.db** - the SQLite database distilling ``adr``, ``bib``, ``ent``, ``pos``, ``urls``, and ``wrd`` into relational tables of the same names, plus an empty ``questions`` table and, after the first ``search``, ``fulltext`` and the FTS5 virtual table ``indx``
 
-   3. **stopwords.txt**
+   2. **carrel.txt** - every document's plain text concatenated together, whitespace-collapsed, with documents separated by a form-feed (``\n\f\n``) so ``ngrams`` and ``concordance`` do not span document boundaries
+
+   3. **stopwords.txt** - the carrel's stopword list; ``neutral`` by default or ``academic`` if ``-p academic`` was given to ``build`` (see :doc:`limitations`); editable with ``rdr edit``
+
+   4. **cache.json** - records a SHA-256 of ``stopwords.txt`` plus the newest ``txt/`` file's mtime for each lazily-cached feature (semantic index, ``grammars`` pickle, sentences, search index); a mismatch on the next run invalidates and rebuilds that cache automatically, or force it early with ``-r``/``--refresh`` where the command supports it
+
+   5. **carrel.vec** - the word2vec (gensim) embedding model, built on first use of ``semantics``
+
+   6. **carrel.sents** - extracted sentences, one per line, built on first use of ``sentences``
+
+   7. **carrel.tok** - tokenized sentences used to train ``carrel.vec``
+
+   8. **reader.spacy** - the whole corpus parsed as one spaCy ``Doc`` and pickled via textacy, built on first use of ``grammars``
+
+   9. **topic-model/** - MALLET's output directory, built on first use of ``rdr tm``; includes ``keys.tsv`` (topics, each with a Dirichlet ``alpha`` and its top words), ``topics.tsv`` (per-document topic proportions, no header row), ``documents.txt``, ``diagnostics.xml``, and ``model-state.gz``
+
+   10. **carrel.authors**, **carrel.wrds** - Wikidata Q-ID lookup tables consulted by ``rdfgraph``; empty until hand-populated (see the ``rdfgraph`` entry in :doc:`commands`)
 
 
 figures
 -------
 
-Graphics And Visualizations
+Graphics and visualizations
+
+PNG word clouds, boxplots, histograms, and dendrogram/cube images generated by ``-w``/``-v``/``-o`` flags on various commands and by ``rdr summarize``.
+
+
+index.csv
+---------
+
+A verbatim copy of the ``metadata.csv`` file supplied at build time, if one was given; absent otherwise.
+
+
+index.htm
+---------
+
+The carrel's summary dashboard, generated by ``rdr summarize``. Absent until that command is first run.
+
+
+index.tsv
+---------
+
+Provenance
+
+A tab-delimited file with eight unlabeled columns, written once at build time and never updated:
+
+   1. the process used to create the carrel (always ``toolbox``)
+   2. the name of the carrel when it was created
+   3. the date the carrel was created, ``yyyy-mm-dd``
+   4. the local time the carrel was created, ``hh:mm``
+   5. the username of the person who created the carrel
+   6. the path to the directory of original files used to create the carrel
+   7. the stopword profile used (``neutral`` or ``academic``)
+   8. the SHA-256 of that profile's stopword list
 
 
 pos
 ---
 
-Parts-Of-Speach
+Parts-of-speech
 
-This subdirectory contains a set of tab-delimited files, and each file contains a set of part-of-speech files from a given document in your corpus. While the files' names end in .pos, they are plain text files that can be imported into for favorite spreadsheet, database, or analysis application. The files have six columns:
+This subdirectory contains a set of tab-delimited files, one per document, named with a ``.pos`` extension. The files have seven columns:
 
-   1. **id** - the unique identifer of a document in the carrel
- 
-   2. **sid**
- 
-   3. **tid**
+   1. **id** - the unique identifier of the document
 
-   4. **token**
+   2. **sid** - the sentence number (0-indexed) the token occurs in
 
-   5. **lemma**
+   3. **tid** - the token's position (0-indexed) within that sentence
 
-   6. **pos**
+   4. **token** - the token text, in its original case (see :doc:`limitations`)
 
-These files help answer question regarding who, what, how, how many, and actions as well as grammer and style.
+   5. **lemma** - the token's lemma (root form)
 
+   6. **pos** - the token's spaCy Universal part-of-speech tag (``NOUN``, ``VERB``, ``ADJ``, etc.)
 
-provenance.tsv
---------------
+   7. **tag** - the token's Penn Treebank fine-grained tag (``NN``, ``VBD``, ``JJ``, etc.); ``rdr pos -l`` matches against ``pos`` OR ``tag``, so ``-l J`` (adjectives) works even though no Universal POS value begins with J. Carrels built before this column existed simply have no ``tag`` values; ``rdr pos`` degrades gracefully and matches on ``pos`` alone for them.
 
 
-This file is a nod towards whence the carrel came - provenance. It is a tab-delimited file with five unlabeled columns:
+readme.txt
+----------
 
-   1. the process used to create the carrel, and this value will usually be "toolbox"
-   2. the name of the carrel when it was origainally created
-   3. the date when the carrel was created and in the form of yyyy-mm-dd
-   4. the local time when the carrel was created and in the form of hh:mm
-   5. the username of the person who created the carrel
-   6. the path to where the original files where found to create the carrel
-   
+A short, embedded usage guide written into every carrel at build time.
+
 
 txt
 ---
 
 Plain text versions of cached items
 
-This subdirectory contains plain text versions of the files stored in the cache directory. A plain text version of each &amp; every item in the cache directory ought to exist in this directory. The contents of this directory is what was used to do the Reader's analysis. The contents of this directory are excellent candidates for further analysis with tools such as concordances, indexers, or topic modelers.
+This subdirectory contains a plain-text version of every file in ``cache``, produced by Tika. This is the text every analysis command actually reads.
+
 
 urls
 ----
 
 Universal Resource Locators
 
-This subdirectory contains a set of tab-delimited files, and each file contains a set of URLs from a given document in your corpus. While the files' names end in .url, they are plain text files that can be imported into for favorite spreadsheet, database, or analysis application. The files have three columns:
+This subdirectory contains a set of tab-delimited files, one per document, named with a ``.url`` extension. The files have three columns:
 
-   1. **id** - the unique identifer of a document in the carrel
+   1. **id** - the unique identifier of the document
 
-   2. **domain** - the domain of a URL; everthing after the pair of slashes ("//") and before the initial slash ("/")
+   2. **domain** - the URL's domain, in its original case
 
-   3. **url** - Universal Resource Locator
-   
-These files help answer questions regarding document provenance and relationships as well as addressing the perenial issue of "finding more like this one".
+   3. **url** - the full URL, in its original case (see :doc:`limitations`)
 
 
 wrd
 ---
 
-Statistically Significant Keywords
+Statistically significant keywords
 
-This subdirectory contains a set of tab-delimited files, and each file contains a set of computed keywords from a given document in your corpus. While the files' names end in .wrd, they are plain text files that can be imported into your favorite spreadsheet, database, or analysis application. The files have two columns:
+This subdirectory contains a set of tab-delimited files, one per document, named with a ``.wrd`` extension. The files have two columns:
 
-   1. **id** - the unique identifer of a document in the carrel
+   1. **id** - the unique identifier of the document
 
-   2. **keyword** - a statistically computed keyword or phrase; this word/phrase was computed using a variation of the venerable TF/IDF algorigthm
-  
-These files help answer questions such as "What is this document about?"
+   2. **keyword** - a keyword or phrase computed per-document by YAKE (not a corpus-relative TF-IDF score; see :doc:`limitations`)

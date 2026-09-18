@@ -53,18 +53,12 @@ This is a quick start for using the Toolbox, sans very much elaboration: ::
     
   # topic model; similar to cluster but with more detail
   rdr tm homer
-  
-  # play hangman
-  rdr play
-  
+
   # page through additional carrels for downloading
   rdr catalog -l remote -h
   
   # read a remote study carrel
-  rdr read pride -l remote 
-  
-  # browse the content of a remote study carrel
-  rdr browse pride -l remote 
+  rdr read pride -l remote
 
   # download another carrel
   rdr download pride
@@ -81,6 +75,6 @@ This is a quick start for using the Toolbox, sans very much elaboration: ::
   # find a lot of love
   rdr concordance sonnets -q love 
 
-See  `Tutorial <./tutorial.html>`_ to learn how to use the Toolbox in greater detail.
+See :doc:`Commands <commands>` to learn how to use the Toolbox in greater detail.
 
 

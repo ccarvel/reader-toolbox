@@ -1,7 +1,7 @@
 Exercise: Introduction
 ======================
 
-This is a short introduction to some of the Toolbox subcommands. It is not a complete listing of all subcommands, just a few of them to get you started. See `Commands in depth <./commands.html>`_ for more thorough documentation.
+This is a short introduction to some of the Toolbox subcommands. It is not a complete listing of all subcommands, just a few of them to get you started. See :doc:`Commands in depth <commands>` for more thorough documentation.
 
 Your first command
 ------------------
@@ -18,29 +18,33 @@ The result ought to look something like this: ::
 	--help  Show this message and exit.
 
   Commands:
-	adr          Filter email addresses from <carrel>.
-	bib          Output rudimentary bibliographics from <carrel>.
-	browse       Peruse <carrel> as a file system.
-	catalog      List study carrels.
-	cluster      Apply dimension reduction to <carrel> and visualize the...
-	concordance  A poor mans search engine.
-	download     Cache <carrel> from the public library of study carrels.
-	edit         Modify the stop word list of <carrel>.
-	ent          Filter out named entities and types of entities found in...
-	get          Echo the values denoted by the set subcommand.
-	grammars     Extract sentence fragments from <carrel> where fragments are...
-	info         Output metadata describing <carrel>.
-	ngrams       Output and list words or phrases found in <carrel>.
-	play         Play the word game called hangman.
-	pos          Filter out parts-of-speech, words, and lemmas found in...
-	read         Open <carrel> in your Web browser.
-	search       Perform a full text query against <carrel>.
-	semantics    Apply semantic indexing against <carrel>.
-	set          Configure the location of study carrels and a subsystem...
-	sql          Use SQL queries against the database of <carrel>.
-	tm           Apply topic modeling against <carrel>.
-	url          Filter URLs and domains from <carrel>.
-	wrd          Filter statistically computed keywords from <carrel>.
+	adr          Filter email addresses from <carrel>
+	bib          Output rudimentary bibliographics from <carrel>
+	build        Create <carrel> from files in <directory>
+	catalog      List study carrels ...
+	cluster      Apply dimension reduction to <carrel> and visualize ...
+	concordance  A poor man's search engine
+	download     Cache <carrel> from the public library of study carrels
+	edit         Modify the stop word list of <carrel>
+	ent          Filter named entities and types of entities found in <carrel>
+	get          Echo the values denoted by the set subcommand ...
+	grammars     Extract sentence fragments from <carrel> ...
+	info         Output metadata describing <carrel>
+	ngrams       Output and list words or phrases found in <carrel>
+	pos          Filter parts-of-speech, words, and lemmas found in <carrel>
+	rdfgraph     Create RDF (Linked Data) file against <carrel>
+	read         Open <carrel> in your Web browser ...
+	readability  Report on the readability (Flesch score) of items in ...
+	search       Perform a full text query against <carrel> ...
+	semantics    Apply semantic indexing against <carrel> ...
+	sentences    Given <carrel> save, output, and process sentences
+	set          Configure the location of study carrels, the subsystem ...
+	sizes        Report on the sizes (in words) of items in <carrel>
+	summarize    Summarize <carrel> ...
+	tm           Apply topic modeling against <carrel> ...
+	url          Filter URLs and domains from <carrel>
+	wrd          Filter statistically computed keywords from <carrel>
+	zip          Create an archive (index.zip) file of <carrel>
 
 To output details regarding a subcommand append ``--help``, for example: ::
 
@@ -154,7 +158,7 @@ Summary
 
 The Toolbox is made up of many different commands. They are invoked by typing rdr followed the command itself. Append --help to any command to learn more about it.
 
-Now that you have gotten this far, see `Commands in depth <./commands.html>`_ for a complete listing of all the commands and how to use them.
+Now that you have gotten this far, see :doc:`Commands in depth <commands>` for a complete listing of all the commands and how to use them.
 
 Happy reading!
 

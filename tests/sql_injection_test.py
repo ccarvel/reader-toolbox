@@ -58,8 +58,8 @@ def test_pos_parts_like_with_a_single_quote( tmp_path ) :
 	carrel = tmp_path/'carrel'
 	( carrel/'etc' ).mkdir( parents=True )
 	connection = sqlite3.connect( str( carrel/'etc'/rdr.DATABASE ) )
-	connection.execute( "CREATE TABLE pos ( id TEXT, pos TEXT )" )
-	connection.execute( "INSERT INTO pos VALUES ( 'a', 'NOUN' )" )
+	connection.execute( "CREATE TABLE pos ( id TEXT, pos TEXT, tag TEXT )" )
+	connection.execute( "INSERT INTO pos VALUES ( 'a', 'NOUN', 'NN' )" )
 	connection.commit()
 	connection.close()
 

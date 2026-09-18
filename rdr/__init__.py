@@ -201,9 +201,6 @@ Depending on how the carrel was computed against (modeled), there may be a numbe
   * index.txt - a bibliographic report in the form of a plain text
     file
 
-  * index.xml - a browsable interface to the study carrel; renders
-    much easier on the Web than on your local computer
-
   * index.zip - the whole study carrel compressed into a single
     file for the purposes of collaborating, sharing, and downloading
 
@@ -543,10 +540,8 @@ TEMPLATE = '''<?xml version="1.0" encoding="utf-8"?>
 			<li><a href="./index.txt">bibliographics (txt)</a> - authors, titles, dates, extents, summaries, and keywords in a simple human-readable form</li>
 			<li><a href="./index.json">bibliographics (JSON)</a> - same as the above but formatted as a JSON stream</li>
 			<li><a href="./index.zip">compressed</a>- the whole study carrel compressed into a single file for the purposes of collaboration, sharing, and downloading</li>
-			<li><a href="./index.xml">manifest</a> - a browsable interface to the study carrel</li>
 			<li><a href="./index.csv">metadata</a> - if the study carrel creation process was augmented with metadata values (authors, titles, dates, etc.) file, then that file is available here</li>
 			<li><a href="./index.gml">network graph</a> - a Graph Modeling Language file of the carrel's author(s), titles, and computed keywords, and it is useful for visualizing their relationships</li>
-			<li><a href="./etc/pathfinder.htm">pathfinder</a> - a stylized version of bibliographics (JSON) grouping the items into sections</li>
 			<li><a href="./index.tsv">provenance</a> - a very very rudimentary list of characateristics denoting whence the carrel came and when</li>
 			<li><a href="./index.rdf">semantic triples</a> - bibliographic characteristics encoded in the form of the Resource Description Framework, and intended for the purposes of supporting the Semantic Web</li> 
 			<li><a href="./index.htm">summary</a> - this file</li>
@@ -2044,7 +2039,7 @@ def keywords( carrel, localLibrary=None, count=False, wordcloud=False, save=Fals
 
 
 # poor man's search engine
-def concordance( carrel, localLibrary=None, query='love', width=40 ) :
+def concordance( carrel, localLibrary=None, query='love', width=40, regex=False, caseInsensitive=False ) :
 
 	'''Given the name of a study carrel, a query, and a window, return a
 	list of lines matching the query fro the given carrel'''
@@ -2053,31 +2048,42 @@ def concordance( carrel, localLibrary=None, query='love', width=40 ) :
 	import re
 	import rdr
 	from pathlib import Path
-	
+
 	# slurp up the corpus
 	if localLibrary : library = Path( localLibrary )
 	else            : library = rdr.configuration( 'localLibrary' )
-		
+
 	# sanity check
 	checkForCarrel( carrel, localLibrary )
-	
+
 	with open( library/carrel/rdr.ETC/rdr.CORPUS, encoding='utf-8'  ) as handle : corpus = handle.read()
 
 
 	# initialize
 	snippets = []
 
+	# escape the query unless the caller explicitly asked for regex (B2.9)
+	# -- a query with characters like '.', '(', or '|' used to be
+	# interpolated straight into the pattern and could break or match more
+	# than intended
+	pattern = query if regex else re.escape( query )
+	flags   = re.IGNORECASE if caseInsensitive else 0
+
 	# find and process all positions matching the query; finditer does the magic
-	matches = re.finditer( '\\b' + query + '\\b', corpus )
+	matches = re.finditer( '\\b' + pattern + '\\b', corpus, flags )
 	for match in matches :
 	
 		# re-initialize
 		start = match.start()
 		end   = match.end()
 		
-		# get the characters before and after the query
+		# get the characters before and after the query, clipped at the
+		# nearest document boundary (B2.3) so a window never bleeds into
+		# an adjacent document; carrel.txt separates documents with '\f'
 		before = corpus[ start - width : start ]
 		after  = corpus[ end            : end + width ]
+		before = before.rsplit( '\f', 1 )[ -1 ]
+		after  = after.split(  '\f', 1 )[ 0 ]
 
 		# build the whole snippet and update
 		snippet = before + ' ' + query + ' ' + after
@@ -2323,12 +2329,15 @@ def ngrams( carrel, localLibrary=None, size=1, query=None, count=False, location
 		click.echo( "Error: Unknown value for location: { location }. Call Eric.", err=True )
 		exit()
 			
-	# read, tokenize, and normalize the text
-	tokens = nltk.word_tokenize( text, preserve_line=True )
-	tokens = [ token.lower() for token in tokens if token.isalpha() ]
-	
-	# create the set of ngrams
-	ngrams = list( nltk.ngrams( tokens, size ) )
+	# read, tokenize, and normalize the text one document at a time (B2.3),
+	# so an ngram never spans the boundary between two documents; carrel.txt
+	# separates documents with '\f' (see _txt2bow())
+	ngrams = []
+	for document in text.split( '\f' ) :
+
+		tokens = nltk.word_tokenize( document, preserve_line=True )
+		tokens = [ token.lower() for token in tokens if token.isalpha() ]
+		ngrams.extend( nltk.ngrams( tokens, size ) )
 	
 	# filter, conditionally
 	if query :
@@ -2435,6 +2444,27 @@ def ngrams( carrel, localLibrary=None, size=1, query=None, count=False, location
 		return '\n'.join( results )
 
 
+# given the name of a study carrel, return its corpus as an nltk.Text
+# object, for use with NLTK's own concordance/dispersion-plot/collocations
+# API directly (re-added per B5, ADR-002; called by notebooks 110/120/170)
+def getNLTKText( carrel, localLibrary=None ) :
+
+	'''Given the name of a study carrel, return its corpus as an nltk.Text
+	object, suitable for NLTK's own concordance(), dispersion_plot(), and
+	collocations() methods.'''
+
+	import nltk
+	from pathlib import Path
+
+	_ensureNLTKData()
+	if localLibrary : localLibrary = Path( localLibrary )
+	else            : localLibrary = configuration( 'localLibrary' )
+	checkForCarrel( carrel, localLibrary )
+
+	text = open( str( localLibrary/carrel/ETC/CORPUS ), encoding='utf-8' ).read()
+	return nltk.Text( nltk.word_tokenize( text ) )
+
+
 # process parts-of-speech
 def pos( carrel, localLibrary=None, select='parts', like='any', count=False, normalize=True, wordcloud=False, save=False ) :
 
@@ -2480,28 +2510,38 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 	connection             = sqlite3.connect( str( localLibrary/carrel/ETC/DATABASE )  )
 	connection.row_factory = sqlite3.Row
 	items                  = []
-	
+
+	# carrels built before B2.8 lack the 'tag' column; degrade gracefully
+	# to matching only the Universal pos tag rather than raising
+	# "no such column: tag"
+	hasTag    = any( row[ 1 ] == 'tag' for row in connection.execute( 'PRAGMA table_info( pos );' ) )
+	tagClause = ' OR tag LIKE ?' if hasTag else ''
+	likeArgs  = lambda : ( like, like ) if hasTag else ( like, )
+
 	# branch accordingly; parts-of-speech
 	if select == 'parts' :
-	
+
 		# initialize like
 		if like == 'any' : like = '%'
 		else             : like = like.upper() + '%'
-		
+
 		# dump parts-of-speech tags
 		if not count :
 
-			# articulate sql, search, and output
-			sql  = "SELECT pos FROM pos WHERE pos LIKE ?;"
-			rows = connection.execute( sql, ( like, ) )
+			# articulate sql, search, and output; match either the
+			# Universal pos tag or the finer-grained Penn tag (B2.8),
+			# e.g. -l J matches nothing under Universal POS (no J-prefixed
+			# tag exists there) but now reaches Penn's JJ/JJR/JJS
+			sql  = "SELECT pos FROM pos WHERE pos LIKE ?" + tagClause + ";"
+			rows = connection.execute( sql, likeArgs() )
 			for row in rows : items.append( row[ 'pos' ] )
 
 		# count and tabulate the dump
 		else :
 
 			# articulate sql, search, and output
-			sql  = "SELECT pos, COUNT( pos ) AS count FROM pos WHERE pos LIKE ? GROUP BY pos ORDER BY count DESC;"
-			rows = connection.execute( sql, ( like, ) )
+			sql  = "SELECT pos, COUNT( pos ) AS count FROM pos WHERE pos LIKE ?" + tagClause + " GROUP BY pos ORDER BY count DESC;"
+			rows = connection.execute( sql, likeArgs() )
 			for row in rows : items.append( "\t".join( [ row[ 'pos' ], str( row[ 'count' ] ) ] ) )
 			
 	# words or lemmas
@@ -2518,33 +2558,35 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 		# simply dump the desired content
 		if not count :
 		
-			# build sql
-			if not normalize : sql = ( 'SELECT %s FROM pos WHERE pos LIKE ?;' % select )
-			else              : sql = ( 'SELECT LOWER( %s ) AS %s FROM pos WHERE pos LIKE ?;' % ( select, select ) )
+			# build sql; match either the Universal pos tag or the
+			# finer-grained Penn tag (B2.8)
+			if not normalize : sql = ( 'SELECT %s FROM pos WHERE pos LIKE ?%s;' % ( select, tagClause ) )
+			else              : sql = ( 'SELECT LOWER( %s ) AS %s FROM pos WHERE pos LIKE ?%s;' % ( select, select, tagClause ) )
 
 			# search and process each resulting row
-			rows = connection.execute( sql, ( like, ) )
+			rows = connection.execute( sql, likeArgs() )
 			for row in rows : items.append( row[ select ] )
 		
 		# count and tabulate the result
 		else:
 
-			# do not lower-case words or lemmas
+			# do not lower-case words or lemmas; match either the
+			# Universal pos tag or the finer-grained Penn tag (B2.8)
 			if not normalize : sql = ( '''SELECT %s AS %s, COUNT( %s ) AS count
 			                              FROM pos
-			                              WHERE pos LIKE ?
+			                              WHERE pos LIKE ?%s
 			                              GROUP BY %s
-			                              ORDER BY count DESC;''' % ( select, select, select, select ) )
+			                              ORDER BY count DESC;''' % ( select, select, select, tagClause, select ) )
 
 			# lower-case words or lemmas
 			else: sql = ( '''SELECT LOWER( %s ) AS %s, COUNT( %s ) AS count
 			                 FROM pos
-			                 WHERE pos LIKE ?
+			                 WHERE pos LIKE ?%s
 			                 GROUP BY LOWER( %s )
-			                 ORDER BY count DESC;''' % ( select, select, select, select ) )
+			                 ORDER BY count DESC;''' % ( select, select, select, tagClause, select ) )
 
 			# search and process each resulting row
-			rows = connection.execute( sql, ( like, ) )
+			rows = connection.execute( sql, likeArgs() )
 
 			# output simple tabulation
 			if not wordcloud :
@@ -2772,31 +2814,30 @@ def entities( carrel, localLibrary=None, select='type', like='any', count=False,
 # do feature reduction and visualize
 def cluster( carrel, localLibrary=None, type='dendrogram', save=False ) :
 
-	'''Given the name of a study carrel, use PCA to reduce the
-	carrel's content to two or three dimensions and then
-	visualize the result. If the value of type is "dendrogram",
-	then reducd to two dimensions, and if the value of type is
-	"cube", then reduce to three dimensions. If the value of save
-	is True, then save the resulting image in the carrel's
-	figures directory.'''
+	'''Given the name of a study carrel, compute a TF-IDF vector for
+	each item, derive a cosine-distance matrix between them, and
+	visualize the result. If the value of type is "dendrogram", the
+	matrix is hierarchically clustered (average-linkage) into a two-
+	dimensional dendrogram; if the value of type is "cube", the
+	matrix is reduced via multidimensional scaling (MDS) to three
+	dimensions. If the value of save is True, then save the
+	resulting image in the carrel's figures directory.'''
 	
 	# configure
 	MAXIMUM   = 0.95
 	MINIMUM   = 2
 	EXTENSION = '.txt'
+	METHOD    = 'average'
 
 	# require
 	from os                              import path, system, listdir
-	from scipy.cluster.hierarchy         import ward, dendrogram
+	from scipy.cluster.hierarchy         import linkage, dendrogram
+	from scipy.spatial.distance          import squareform
 	from sklearn.feature_extraction.text import TfidfVectorizer
 	from sklearn.manifold                import MDS
 	from sklearn.metrics.pairwise        import cosine_similarity
 	import matplotlib.pyplot             as     plt
 	from pathlib import Path
-	
-	# ignore warnings; probably not the greatest idea
-	import warnings
-	warnings.filterwarnings("ignore")
 
 	# initialize
 	if localLibrary : localLibrary = Path( localLibrary )
@@ -2815,13 +2856,20 @@ def cluster( carrel, localLibrary=None, type='dendrogram', save=False ) :
 
 	# branch according to type; dendrogram
 	if type == 'dendrogram' :
-		linkage_matrix = ward( distance )
+		# distance is a square, precomputed distance matrix (1 - cosine
+		# similarity), not a set of observations -- squareform() converts
+		# it to the condensed form linkage() actually expects (B2.5);
+		# ward() on the square matrix treated each row as an n-dimensional
+		# observation and SciPy warned about exactly that
+		linkage_matrix = linkage( squareform( distance, checks=False ), method=METHOD )
 		dendrogram( linkage_matrix, orientation="right", labels=keys )
-		plt.tight_layout() 
+		plt.tight_layout()
 
 	# cube
 	elif type == 'cube' :
-		mds = MDS( n_components=3, dissimilarity="precomputed", random_state=1 )
+		# dissimilarity="precomputed" -> metric="precomputed" (B2.5): scikit-learn
+		# renamed this parameter in 1.8 and removes dissimilarity in 1.10
+		mds = MDS( n_components=3, metric="precomputed", random_state=1 )
 		pos = mds.fit_transform( distance )
 		fig = plt.figure()
 		ax  = fig.add_subplot( 111, projection='3d' )
@@ -3337,15 +3385,22 @@ def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=1
 		
 		# try to compute
 		try :
-		
-			positive = [ words[ 0 ], words[ 2 ] ]
-			negative = words[ 1 ]
+
+			# "w0 w1 w2" means "w0 is to w1 as w2 is to ?" -- the target is
+			# w1 - w0 + w2 (B2.6); "king queen prince" -> princess
+			positive = [ words[ 1 ], words[ 2 ] ]
+			negative = [ words[ 0 ] ]
 			items    = []
-			
+
 			similarities = model.most_similar( positive=positive, negative=negative, topn=topn )
-			#for similarity in similarities : print( similarity )
-			return( similarities )
-			
+			for similarity in similarities :
+
+				word  = similarity[ 0 ]
+				score = similarity[ 1 ]
+				items.append( '\t'.join( [ word, str( score ) ] ) )
+
+			return '\n'.join( items )
+
 		# error
 		except KeyError as word : sys.stderr.write( ( 'A word in your query -- %s -- is not in the index. Please remove it.\n' % word ) )
 
@@ -3761,7 +3816,7 @@ def _tikaIsRunning () :
 	
 	
 # create carrel skeleton
-def _initialize( carrel, directory, localLibrary=None ) :
+def _initialize( carrel, directory, localLibrary=None, profile='neutral' ) :
 	
 	# require
 	from datetime import datetime
@@ -3776,15 +3831,32 @@ def _initialize( carrel, directory, localLibrary=None ) :
 	TXT      = 'txt'
 	URLS     = 'urls'
 	WRD      = 'wrd'
-	WORDS    = '''journal\nresearch\nstudy\nhttps://doi.org\nthey\nnew\nuniversity\nfigure\ndoi\nvol\ninternational\nshe\nused\nonline\nstudent\npolitical\ndigital\nmay\nissue\ncultural\nblack\nwhite\none\ntwo\nthree\nafrican\namerican\nacademic\nsouth\nchinese\nnumber\nvolume\nmedical\nwriting\nlike\nsee\nfig\ncontent\nhttp\nhttps\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\na\na\nabout\nabove\nafter\nagain\nagainst\nall\nalso\nam\nan\nand\nany\nare\naren't\nas\nat\nb\nbe\nbecause\nbeen\nbefore\nbeing\nbelow\nbetween\nboth\nbut\nby\nc\ncan\ncan't\ncannot\ncould\ncouldn't\nd\ndid\ndidn't\ndo\ndoes\ndoesn't\ndoing\ndon't\ndown\nduring\ne\neach\nf\nfew\nfor\nfrom\nfurther\ng\nh\nhad\nhadn't\nhas\nhasn't\nhast\nhath\nhave\nhaven't\nhaving\nhe'd\nhe'll\nhe's\nher\nhere\nhere's\nhers\nherself\nhim\nhimself\nhis\nhow\nhow's\ni'd\ni'll\ni'm\ni've\nif\nin\ninto\nis\nisn't\nit\nit's\nits\nitself\nj\nk\nl\nlet's\nm\nme\nmore\nmost\nmustn't\nmy\nmyself\nn\nno\nnor\nnot\no\nof\noff\non\nonce\none\nonly\nor\nother\nought\nour\nours\nourselves\nout\nover\nown\np\nq\nr\ns\nsaid\nsame\nshan't\nshe'd\nshe'll\nshe's\nshould\nshouldn't\nso\nsome\nsuch\nt\nthan\nthat\nthat's\nthe\nthee\ntheir\ntheirs\nthem\nthemselves\nthen\nthere\nthere's\nthese\nthey'd\nthey'll\nthey're\nthey've\nthis\nthose\nthou\nthrough\nthus\nthy\nto\ntoo\nu\nunder\nuntil\nunto\nup\nupon\nv\nvery\nw\nwas\nwasn't\nwe'd\nwe'll\nwe're\nwe've\nwere\nweren't\nwhat\nwhat's\nwhen\nwhen's\nwhere\nwhere's\nwhich\nwhile\nwho\nwho's\nwhom\nwhy\nwhy's\nwill\nwith\nwon't\nwould\nwouldn't\nx\ny\nyou'd\nyou'll\nyou're\nyou've\nyour\nyours\nyourself\nyourselves\nz\n'''
+	# ACADEMIC is the original shipped stoplist (opt-in as of B2.2): it drops
+	# gendered pronouns asymmetrically (she/her/his/him/they/it, but not he/i)
+	# and drops ethnonym/color terms (black/white/african/american/chinese/...),
+	# which silently biases literary NER/frequency/topic/embedding results.
+	ACADEMIC = '''journal\nresearch\nstudy\nhttps://doi.org\nthey\nnew\nuniversity\nfigure\ndoi\nvol\ninternational\nshe\nused\nonline\nstudent\npolitical\ndigital\nmay\nissue\ncultural\nblack\nwhite\none\ntwo\nthree\nafrican\namerican\nacademic\nsouth\nchinese\nnumber\nvolume\nmedical\nwriting\nlike\nsee\nfig\ncontent\nhttp\nhttps\n0\n1\n2\n3\n4\n5\n6\n7\n8\n9\na\na\nabout\nabove\nafter\nagain\nagainst\nall\nalso\nam\nan\nand\nany\nare\naren't\nas\nat\nb\nbe\nbecause\nbeen\nbefore\nbeing\nbelow\nbetween\nboth\nbut\nby\nc\ncan\ncan't\ncannot\ncould\ncouldn't\nd\ndid\ndidn't\ndo\ndoes\ndoesn't\ndoing\ndon't\ndown\nduring\ne\neach\nf\nfew\nfor\nfrom\nfurther\ng\nh\nhad\nhadn't\nhas\nhasn't\nhast\nhath\nhave\nhaven't\nhaving\nhe'd\nhe'll\nhe's\nher\nhere\nhere's\nhers\nherself\nhim\nhimself\nhis\nhow\nhow's\ni'd\ni'll\ni'm\ni've\nif\nin\ninto\nis\nisn't\nit\nit's\nits\nitself\nj\nk\nl\nlet's\nm\nme\nmore\nmost\nmustn't\nmy\nmyself\nn\nno\nnor\nnot\no\nof\noff\non\nonce\none\nonly\nor\nother\nought\nour\nours\nourselves\nout\nover\nown\np\nq\nr\ns\nsaid\nsame\nshan't\nshe'd\nshe'll\nshe's\nshould\nshouldn't\nso\nsome\nsuch\nt\nthan\nthat\nthat's\nthe\nthee\ntheir\ntheirs\nthem\nthemselves\nthen\nthere\nthere's\nthese\nthey'd\nthey'll\nthey're\nthey've\nthis\nthose\nthou\nthrough\nthus\nthy\nto\ntoo\nu\nunder\nuntil\nunto\nup\nupon\nv\nvery\nw\nwas\nwasn't\nwe'd\nwe'll\nwe're\nwe've\nwere\nweren't\nwhat\nwhat's\nwhen\nwhen's\nwhere\nwhere's\nwhich\nwhile\nwho\nwho's\nwhom\nwhy\nwhy's\nwill\nwith\nwon't\nwould\nwouldn't\nx\ny\nyou'd\nyou'll\nyou're\nyou've\nyour\nyours\nyourself\nyourselves\nz\n'''
+	# NEUTRAL is the default as of B2.2 (operator decision, .relay/decisions.md
+	# ADR-001): the standard NLTK English stopwords corpus, with every personal
+	# pronoun/possessive/reflexive form (he, she, it, they, i, we, you, and
+	# their possessive/reflexive/contraction variants) removed so no pronoun --
+	# gendered or otherwise -- is ever silently dropped from frequency/topic/
+	# embedding results. Carries no domain jargon or ethnonym/color terms.
+	NEUTRAL  = '''a\nabout\nabove\nafter\nagain\nagainst\nain\nall\nam\nan\nand\nany\nare\naren\naren't\nas\nat\nbe\nbecause\nbeen\nbefore\nbeing\nbelow\nbetween\nboth\nbut\nby\ncan\ncouldn\ncouldn't\nd\ndid\ndidn\ndidn't\ndo\ndoes\ndoesn\ndoesn't\ndoing\ndon\ndon't\ndown\nduring\neach\nfew\nfor\nfrom\nfurther\nhad\nhadn\nhadn't\nhas\nhasn\nhasn't\nhave\nhaven\nhaven't\nhaving\nhere\nhow\nif\nin\ninto\nis\nisn\nisn't\njust\nll\nm\nma\nmightn\nmightn't\nmore\nmost\nmustn\nmustn't\nneedn\nneedn't\nno\nnor\nnot\nnow\no\nof\noff\non\nonce\nonly\nor\nother\nout\nover\nown\nre\ns\nsame\nshan\nshan't\nshould\nshould've\nshouldn\nshouldn't\nso\nsome\nsuch\nt\nthan\nthat\nthat'll\nthe\nthen\nthere\nthese\nthis\nthose\nthrough\nto\ntoo\nunder\nuntil\nup\nve\nvery\nwas\nwasn\nwasn't\nwere\nweren\nweren't\nwhat\nwhen\nwhere\nwhich\nwhile\nwho\nwhom\nwhy\nwill\nwith\nwon\nwon't\nwouldn\nwouldn't\ny\n'''
+	PROFILES = { 'neutral' : NEUTRAL, 'academic' : ACADEMIC }
 	PROCESS  = 'toolbox'
 
 	# require
 	from   datetime import datetime
 	from   getpass  import getuser
 	from   pathlib  import Path
+	import hashlib
 	import shutil
-	
+
+	# select the stopword profile (B2.2); unknown values fall back to neutral
+	words          = PROFILES.get( profile, NEUTRAL )
+	wordsSHA256    = hashlib.sha256( words.encode( 'utf-8' ) ).hexdigest()
+
 	# create the library, the carrel, and the carrel's sub-directories
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
@@ -3808,7 +3880,7 @@ def _initialize( carrel, directory, localLibrary=None ) :
 	timeCreated = datetime.now().strftime("%H:%M")
 	creator     = getuser()
 	input       = directory
-	record      = [ PROCESS, originalID, dateCreated, timeCreated, creator, input ]
+	record      = [ PROCESS, originalID, dateCreated, timeCreated, creator, input, profile, wordsSHA256 ]
 	output      = localLibrary/carrel/PROVENANCE
 	with open( output, 'w', encoding='utf-8' ) as handle : handle.write( '\t'.join( record ) + '\n' )
 	
@@ -3831,7 +3903,7 @@ def _initialize( carrel, directory, localLibrary=None ) :
 
 	# add stop words; there is probably a better way
 	output = localLibrary/carrel/ETC/STOPWORDS
-	with open( output, 'w', encoding='utf-8' ) as handle : handle.write( WORDS )
+	with open( output, 'w', encoding='utf-8' ) as handle : handle.write( words )
 
 	# add readme
 	output      = localLibrary/carrel/READMEFILE
@@ -4108,11 +4180,12 @@ def _summarize( doc ) :
 def _txt2bow( carrel, localLibrary=None ) :
 
 	# configure; not quite right
-	PATTERN = '*.txt'
-	BOW     = 'carrel.txt'
-	TXT     = 'txt'
-	ETC     = 'etc'
-	
+	PATTERN   = '*.txt'
+	BOW       = 'carrel.txt'
+	TXT       = 'txt'
+	ETC       = 'etc'
+	SEPARATOR = '\n\f\n'
+
 	# require
 	from pathlib import Path
 
@@ -4120,13 +4193,18 @@ def _txt2bow( carrel, localLibrary=None ) :
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
 
-	# process each text file in the given directory
+	# process each text file in the given directory, separating documents
+	# with a form feed (B2.3) so n-grams and concordance windows never
+	# span a document boundary; _normalize() leaves \f alone (only \n, \t,
+	# and runs of spaces are touched), so it survives as a splittable marker
 	txt = localLibrary/carrel/TXT
 	bow = ''
 	for file in txt.glob( PATTERN ) :
-	
+
 		# create/increment the bag of words
-		with open( file, encoding='utf-8' ) as handle : bow += handle.read()
+		with open( file, encoding='utf-8' ) as handle : content = handle.read()
+		if bow : bow += SEPARATOR
+		bow += content
 	
 	# _normalize
 	bow = _normalize( bow )
@@ -4138,13 +4216,13 @@ def _txt2bow( carrel, localLibrary=None ) :
 
 
 # _normalize text, a poor man's version
-def _normalize( text ) :
+def _normalize( text, lowercase=True ) :
 
 	# require
 	import re
-	
+
 	# _normalize the text in the bag-of-words
-	text = text.lower()
+	if lowercase : text = text.lower()
 	text = re.sub( r'\r', '\n', text )
 	text = re.sub( r'\n+', ' ', text )
 	text = re.sub( r'^\W+', '', text )
@@ -4227,7 +4305,7 @@ def _txt2ent( carrel, file, localLibrary=None ) :
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
-	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read() )
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
 
 	# model the text
 	nlp            = spacy.load( MODELMEDIUM )
@@ -4259,22 +4337,22 @@ def _txt2pos( carrel, file, localLibrary=None ) :
 	# configure
 	EXTENSION = '.pos'
 	POS       = 'pos'
-	HEADER    = [ 'id', 'sid', 'tid', 'token', 'lemma', 'pos' ]
+	HEADER    = [ 'id', 'sid', 'tid', 'token', 'lemma', 'pos', 'tag' ]
 
 	# require
 	import spacy
 	from pathlib import Path
-	
+
 	# _initialize
 	key          = _name2key( file )
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
-	
-	# debug 
+
+	# debug
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
-	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read() )
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
 
 	# model the text
 	nlp            = spacy.load( MODELMEDIUM )
@@ -4287,21 +4365,24 @@ def _txt2pos( carrel, file, localLibrary=None ) :
 
 		# _initialize the output
 		handle.write( '\t'.join( HEADER ) + '\n' )
-		
+
 		# process each sentence
 		for s, sentence in enumerate( doc.sents ) :
-			
+
 			# process each token
 			for t, token in enumerate( sentence ) :
 
 				# process non-spaces
 				if token.text > ' ' :
-	
-					# parse and output
+
+					# parse and output; pos is spaCy's Universal POS tag,
+					# tag is the finer-grained Penn Treebank tag (B2.8),
+					# e.g. 'ADJ' vs 'JJ'/'JJR'/'JJS'
 					feature = str( token.text )
 					lemma   = str( token.lemma_.lower() )
 					pos     = token.pos_
-					handle.write( '\t'.join( [  key, str( s + 1 ), str( t + 1 ), feature, lemma, pos ] ) + '\n' )
+					tag     = token.tag_
+					handle.write( '\t'.join( [  key, str( s + 1 ), str( t + 1 ), feature, lemma, pos, tag ] ) + '\n' )
 
 
 # given a file, extract domains and urls
@@ -4326,10 +4407,13 @@ def _txt2url( carrel, file, localLibrary ) :
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
-	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read() )
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
 
 	# get and process each url, to the best of my ability
-	urls = re.findall( PATTERN, text )
+	# (case-insensitive: with lower-casing removed above, an upper-case
+	# scheme like "HTTPS://" would otherwise never match the lower-case
+	# literal "https?" and the url would be silently missed entirely)
+	urls = re.findall( PATTERN, text, re.IGNORECASE )
 	
 	# check for addresses
 	if len( urls ) > 0 :
@@ -4384,7 +4468,7 @@ def _txt2wrd( carrel, file, localLibrary=None ) :
 	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
 
 	# slurp up the file
-	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read() )
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
 
 	# model the text and get the keywords
 	nlp            = spacy.load( MODELMEDIUM )
@@ -4415,6 +4499,144 @@ def _txt2wrd( carrel, file, localLibrary=None ) :
 				keyword = record[ 0 ]
 				if len( keyword ) < 3 : continue
 				handle.write( '\t'.join( ( key, keyword ) ) + '\n' )
+
+
+# B2.4: worker-process-local model, loaded once via a Pool initializer
+# instead of once per _txt2ent()/_txt2pos()/_txt2wrd() call
+_WORKERNLP = None
+
+def _initFeatureWorker() :
+
+	# require
+	import spacy
+
+	# load once for the lifetime of this worker process
+	global _WORKERNLP
+	_WORKERNLP = spacy.load( MODELMEDIUM )
+
+
+# split text on whitespace so no spaCy Doc has to hold more than maxChars
+# characters at once (B2.4); a no-op for anything under that size
+def _chunkText( text, maxChars=1000000 ) :
+
+	if len( text ) <= maxChars : return [ text ]
+
+	chunks = []
+	start  = 0
+	length = len( text )
+	while start < length :
+
+		end = min( start + maxChars, length )
+		if end < length :
+
+			# back up to the nearest space so a word is never split
+			split = text.rfind( ' ', start, end )
+			if split > start : end = split
+
+		chunks.append( text[ start:end ] )
+		start = end
+
+	return chunks
+
+
+# entities, parts-of-speech, and keywords from ONE spaCy parse per document
+# (B2.4), used by build()'s Pool instead of separately calling _txt2ent(),
+# _txt2pos(), and _txt2wrd() (each of which loads its own model and parses
+# the text again). Requires _initFeatureWorker() to have already set
+# _WORKERNLP in this worker process.
+def _txt2features( carrel, file, localLibrary=None ) :
+
+	# configure
+	ENT          = 'ent'
+	POS          = 'pos'
+	WRD          = 'wrd'
+	ENTEXTENSION = '.ent'
+	POSEXTENSION = '.pos'
+	WRDEXTENSION = '.wrd'
+	ENTHEADER    = [ 'id', 'sid', 'eid', 'entity', 'type' ]
+	POSHEADER    = [ 'id', 'sid', 'tid', 'token', 'lemma', 'pos', 'tag' ]
+	WRDHEADER    = [ 'id', 'keyword' ]
+	NGRAMS       = ( 1, 2 )
+	TOPN         = 0.0125
+	NORMALIZE    = 'lower'
+	WINDOWSIZE   = 5
+	WRDPOS       = ( 'NOUN', 'PROPN' )
+	MAXCHARS     = 1000000
+
+	# require
+	from   pathlib                  import Path
+	from   textacy.extract.keyterms import yake
+
+	# _initialize
+	key          = _name2key( file )
+	if localLibrary : localLibrary = Path( localLibrary )
+	else            : localLibrary = configuration( 'localLibrary' )
+
+	# debug
+	if VERBOSE : click.echo( ( '\t%s' % key ), err=True )
+
+	# slurp up the file
+	with open( file, encoding='utf-8' ) as handle : text = _normalize( handle.read(), lowercase=False )
+
+	# this worker's already-loaded model; chunk long documents so a single
+	# Doc never has to hold more than MAXCHARS characters
+	nlp            = _WORKERNLP
+	nlp.max_length = MAXCHARS + 1
+	chunks         = _chunkText( text, MAXCHARS )
+
+	# one parse per chunk (nlp.pipe), shared by ent/pos/wrd below
+	entOutput  = localLibrary/carrel/ENT/( key + ENTEXTENSION )
+	posOutput  = localLibrary/carrel/POS/( key + POSEXTENSION )
+	wrdRecords = []
+	sidOffset  = 0
+
+	with open( entOutput, 'w', encoding='utf-8' ) as entHandle, open( posOutput, 'w', encoding='utf-8' ) as posHandle :
+
+		entHandle.write( '\t'.join( ENTHEADER ) + '\n' )
+		posHandle.write( '\t'.join( POSHEADER ) + '\n' )
+
+		for doc in nlp.pipe( chunks ) :
+
+			sentences = list( doc.sents )
+
+			for s, sentence in enumerate( sentences ) :
+
+				sid = sidOffset + s + 1
+
+				for e, entity in enumerate( sentence.ents ) :
+					entHandle.write( '\t'.join( [ key, str( sid ), str( e + 1 ), entity.text, entity.label_ ] ) + '\n' )
+
+				for t, token in enumerate( sentence ) :
+					if token.text > ' ' :
+						# pos is Universal POS, tag is the finer-grained
+						# Penn Treebank tag (B2.8)
+						posHandle.write( '\t'.join( [ key, str( sid ), str( t + 1 ), str( token.text ), str( token.lemma_.lower() ), token.pos_, token.tag_ ] ) + '\n' )
+
+			sidOffset += len( sentences )
+
+			# keywords; ranked per parsed chunk (a no-op distinction for
+			# the overwhelming majority of documents, which are one chunk)
+			try    : wrdRecords.extend( yake( doc, ngrams=NGRAMS, window_size=WINDOWSIZE, topn=TOPN, normalize=NORMALIZE, include_pos=WRDPOS ) )
+			except Exception as error : click.echo( f"WARNING: keyword extraction failed for { key }: { error }", err=True )
+
+	# check for records
+	if len( wrdRecords ) > 0 :
+
+		# open output
+		output = localLibrary/carrel/WRD/( key + WRDEXTENSION )
+		with open( output, 'w', encoding='utf-8' ) as handle :
+
+			# _initialize the output
+			handle.write( '\t'.join( WRDHEADER ) + '\n' )
+
+			# process each record
+			for record in wrdRecords :
+
+				# do the simplest of normalization and output
+				keyword = record[ 0 ]
+				if len( keyword ) < 3 : continue
+				handle.write( '\t'.join( ( key, keyword ) ) + '\n' )
+
 
 # start tika
 def _startTika() :
@@ -4496,7 +4718,7 @@ def _tsv2db( directory, extension, table, connection ) :
 		features.to_sql( table, connection, if_exists='replace', index=False )
 
 
-def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
+def build( carrel, directory, erase=False, start=False, localLibrary=None, profile='neutral', jobs=None ) :
 
 	"""Create <carrel> from files in <directory>
 
@@ -4519,16 +4741,13 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 	# configure
 	CACHE     = 'cache'
 	TXT       = 'txt'
-	SCHEMA    = '''-- parts-of-speech\ncreate table pos (\n    id    TEXT,\n    sid   INT,\n    tid   INT,\n    token TEXT,\n    lemma TEXT,\n    pos   TEXT\n);\n\n-- name entitites\ncreate table ent (\n    id     TEXT,\n    sid    INT,\n    eid    INT,\n    entity TEXT,\n    type   TEXT\n);\n\n-- keywords\ncreate table wrd (\n    id      TEXT,\n    keyword TEXT\n);\n\n-- email addresses\ncreate table adr (\n    id      TEXT,\n    address TEXT\n);\n\n-- questions\ncreate table questions (\n    id       TEXT,\n    question TEXT\n);\n\n-- urls\ncreate table url (\n    id     TEXT,\n    domain TEXT,\n    url    TEXT\n);\n\n-- bibliographics, such as they are\ncreate table bib (\n    id        TEXT,\n    words     INT,\n    sentence  INT,\n    flesch    INT,\n    summary   TEXT,\n    title     TEXT,\n    author    TEXT,\n    date      TEXT,\n    txt       TEXT,\n    cache     TEXT,\n    pages     INT,\n    extension TEXT,\n    mime      TEXT,\n    genre     TEXT\n);'''
+	SCHEMA    = '''-- parts-of-speech\ncreate table pos (\n    id    TEXT,\n    sid   INT,\n    tid   INT,\n    token TEXT,\n    lemma TEXT,\n    pos   TEXT,\n    tag   TEXT\n);\n\n-- name entitites\ncreate table ent (\n    id     TEXT,\n    sid    INT,\n    eid    INT,\n    entity TEXT,\n    type   TEXT\n);\n\n-- keywords\ncreate table wrd (\n    id      TEXT,\n    keyword TEXT\n);\n\n-- email addresses\ncreate table adr (\n    id      TEXT,\n    address TEXT\n);\n\n-- questions\ncreate table questions (\n    id       TEXT,\n    question TEXT\n);\n\n-- urls\ncreate table url (\n    id     TEXT,\n    domain TEXT,\n    url    TEXT\n);\n\n-- bibliographics, such as they are\ncreate table bib (\n    id        TEXT,\n    words     INT,\n    sentence  INT,\n    flesch    INT,\n    summary   TEXT,\n    title     TEXT,\n    author    TEXT,\n    date      TEXT,\n    txt       TEXT,\n    cache     TEXT,\n    pages     INT,\n    extension TEXT,\n    mime      TEXT,\n    genre     TEXT\n);'''
 	POS       = 'pos'
 	ENT       = 'ent'
 	WRD       = 'wrd'
 	ADR       = 'adr'
 	URL       = 'urls'
 	BIB       = 'bib'
-	POOLSMALL = 24
-	POOLBIG   = 24
-	
 	# require
 	from   multiprocessing import Pool
 	from   pathlib         import Path
@@ -4537,8 +4756,11 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 	import sqlite3
 	import pandas as pd
 	import spacy
-	
-	# _initialize
+
+	# _initialize; default worker count to the actual CPU count (B2.4) rather
+	# than the previous hard-coded 24, which oversubscribed smaller machines
+	POOLSMALL = jobs if jobs else os.cpu_count()
+	POOLBIG   = POOLSMALL
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
 	pool         = Pool( POOLSMALL )
@@ -4550,7 +4772,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 	if start :
 	
 		# debug
-		click.echo( '(Step #-1 of 9) Starting Tika server at http://localhost:9998/; please be patient.', err=True )
+		click.echo( '(Step #-1 of 7) Starting Tika server at http://localhost:9998/; please be patient.', err=True )
 		
 		# go
 		if _startTika() == False :
@@ -4583,7 +4805,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 		if erase :
 		
 			# debug and do the work
-			click.echo( ( '(Step #0 of 9) Deleting %s' % ( localLibrary/carrel ) ), err=True )
+			click.echo( ( '(Step #0 of 7) Deleting %s' % ( localLibrary/carrel ) ), err=True )
 			shutil.rmtree( localLibrary/carrel )
 			
 		# carrel exists and erasing was not specified
@@ -4596,8 +4818,8 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 			exit()
 
 	# build skeleton
-	click.echo( '(Step #1 of 9) Initializing %s with %s and stop words' % ( carrel, directory ), err=True )
-	_initialize( carrel, directory, localLibrary )
+	click.echo( '(Step #1 of 7) Initializing %s with %s and stop words' % ( carrel, directory ), err=True )
+	_initialize( carrel, directory, localLibrary, profile )
 		
 	# create a list of filenames to process
 	filenames = []
@@ -4609,7 +4831,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 		else                    : filenames.append( os.path.join( cache, filename ) )
 	
 	# conditionally slurp up the metadata file and submit 
-	click.echo( '(Step #2 of 9) Extracting bibliographics and converting documents to plain text', err=True )
+	click.echo( '(Step #2 of 7) Extracting bibliographics and converting documents to plain text', err=True )
 	
 	# check for metadata file
 	if ( localLibrary/carrel/METADATA ).exists() :
@@ -4629,7 +4851,7 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 	pool = Pool( POOLBIG )
 
 	# bag of words
-	click.echo( '(Step #3 of 9) Creating bag-of-words', err=True )
+	click.echo( '(Step #3 of 7) Creating bag-of-words', err=True )
 	_txt2bow( carrel, localLibrary )
 	
 	# output hint
@@ -4641,46 +4863,35 @@ def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
 	for filename in os.listdir( txt ) : filenames.append( os.path.join( txt, filename ) )
 
 	# extract email addresses
-	click.echo( '(Step #4 of 9) Extracting (email) addresses', err=True )
+	click.echo( '(Step #4 of 7) Extracting (email) addresses', err=True )
 	pool.starmap( _txt2adr, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
 	
 	# clean up
 	pool.close()
 	pool = Pool( POOLBIG )
 
-	# extract named entities
-	click.echo( '(Step #5 of 9) Extracting (named) entities', err=True )
-	pool.starmap( _txt2ent, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
-	
-	# clean up
+	# extract entities, parts-of-speech, and keywords -- one spaCy model
+	# load per worker (via the Pool initializer) and one parse per
+	# document, shared across all three (B2.4), instead of three separate
+	# pools each loading the model and parsing the text again
+	click.echo( '(Step #5 of 7) Extracting entities, parts-of-speech, and keywords', err=True )
 	pool.close()
-	pool = Pool( POOLBIG )
-
-	# extract parts-of-speech
-	click.echo( '(Step #6 of 9) Extracting parts-of-speech', err=True )
-	pool.starmap( _txt2pos, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
+	pool = Pool( POOLBIG, initializer=_initFeatureWorker )
+	pool.starmap( _txt2features, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
 
 	# clean up
 	pool.close()
 	pool = Pool( POOLBIG )
 
 	# extract urls
-	click.echo( '(Step #7 of 9) Extracting URLs', err=True )
+	click.echo( '(Step #6 of 7) Extracting URLs', err=True )
 	pool.starmap( _txt2url, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
-
-	# clean up
-	pool.close()
-	pool = Pool( POOLBIG )
-
-	# extract keywords
-	click.echo( '(Step #8 of 9) Extracting (key) words', err=True )
-	pool.starmap( _txt2wrd, [ [ carrel, filename, localLibrary ] for filename in filenames ] )
 
 	# clean up
 	pool.close()
 
 	# create database
-	click.echo( '(Step #9 of 9) Creating and filling database (reducing)', err=True )
+	click.echo( '(Step #7 of 7) Creating and filling database (reducing)', err=True )
 	database   = str( localLibrary/carrel/ETC/DATABASE )
 	connection = sqlite3.connect( database )
 	cursor     = connection.cursor()
