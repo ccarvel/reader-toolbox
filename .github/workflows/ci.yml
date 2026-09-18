@@ -83,12 +83,6 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
 
-    services:
-      tika:
-        image: apache/tika:latest
-        ports:
-          - 9998:9998
-
     steps:
       - uses: actions/checkout@v4
 
@@ -115,36 +109,51 @@ jobs:
           python -m spacy download en_core_web_md
           python -m nltk.downloader punkt_tab averaged_perceptron_tagger_eng wordnet stopwords
 
+      # Same tika-server.jar the toolbox downloads for itself (see the
+      # `test` job's identical step) -- NOT the apache/tika:latest Docker
+      # image this job used before. That image floats to whatever Tika
+      # release is current (Tika 4.0.0 as of this fix), and Tika 4's REST
+      # response schema moved extracted text from a top-level `content`
+      # field into `metadata['tk:content']`; the `tika-python` client
+      # (last released for the old schema) then reads `content` as None.
+      # _file2bib() treats empty content as "nothing to do" and silently
+      # returns without writing anything -- no error, just an empty
+      # carrel. Real users never hit this: _checkForTika() downloads a
+      # specific pinned jar (Tika 1.24.1, confirmed in Plan A's A1.4),
+      # never "latest". Root-caused via a temporary diagnostic step
+      # (removed here) that compared a raw curl against the Tika REST API
+      # to tika-python's own parser.from_file() on the same file.
+      - name: Start Tika
+        run: |
+          curl -sSL -o /tmp/tika-server.jar https://distantreader.org/apps/tika-server.jar
+          nohup java -jar /tmp/tika-server.jar > /tmp/tika.log 2>&1 &
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:9998/ && break
+            sleep 3
+          done
+
       # most notebooks default their carrel parameter to 'mini' (see
       # docs/notebooks.rst); build it once here so they don't each have to
       - name: Build the mini carrel
         run: rdr build mini tests/fixtures/mini
 
-      # TEMPORARY diagnostic: the previous run's build "succeeded" (exit 0,
-      # all 7 steps printed) but most notebooks then failed with symptoms
-      # consistent with an empty carrel (0 words for a wordcloud, empty
-      # vocabulary, int(None)). Print real row counts to confirm before
-      # digging further -- remove once root-caused.
-      - name: Diagnostic -- mini carrel row counts
+      # rdr build can exit 0 while having silently written nothing (e.g.
+      # the Tika-schema mismatch this job just hit): _file2bib() treats
+      # empty extracted text as "nothing to do" and returns quietly, with
+      # no error anywhere in the build's own output. Left unchecked, that
+      # produces ~26 unrelated-looking notebook failures (wordcloud "got 0
+      # words", "empty vocabulary", int(None) from extents()) that all
+      # trace back to the one real cause but give no indication of it.
+      # Fail fast here instead, with a message that names the actual
+      # problem.
+      - name: Sanity-check the mini carrel isn't empty
         run: |
-          echo "HOME=$HOME"
-          find "$HOME/reader-library/mini" -type f | sort
-          echo "--- index.tsv ---"
-          cat "$HOME/reader-library/mini/index.tsv" || true
-          echo "--- cache/ input files ---"
-          ls -la "$HOME/reader-library/mini/cache/" || true
-          echo "--- bib table ---"
-          sqlite3 "$HOME/reader-library/mini/etc/carrel.db" "select * from bib;" || true
-          echo "--- raw curl against the Tika REST endpoint (bypassing tika-python) ---"
-          curl -sS -X PUT --data-binary @tests/fixtures/mini/iliad-book1-excerpt.txt -H "Accept: text/plain" -H "Content-Type: text/plain" http://localhost:9998/tika
-          echo
-          echo "--- tika-python's own parser.from_file(), directly ---"
-          python -c "
-          from tika import parser
-          parsed = parser.from_file('tests/fixtures/mini/iliad-book1-excerpt.txt')
-          print('metadata:', parsed.get('metadata'))
-          print('content repr:', repr(parsed.get('content'))[:300])
-          "
+          COUNT=$(sqlite3 "$HOME/reader-library/mini/etc/carrel.db" "select count(*) from bib;")
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::mini carrel build produced 0 bib rows. rdr build exited 0 but wrote nothing -- most likely Tika returned no extractable text (check the Tika server version/response schema; see the 'Start Tika' step's comment above for the exact failure this caught before). Every notebook below will fail with unrelated-looking errors if this ships unnoticed."
+            exit 1
+          fi
+          echo "mini carrel: $COUNT bib rows"
 
       - name: Run notebooks against the mini carrel
         run: pytest --nbmake notebooks/ --nbmake-timeout=600
