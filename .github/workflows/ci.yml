@@ -16,21 +16,6 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
-    # a real Tika server, reachable at localhost:9998, for the
-    # session-scoped mini_carrel fixture (tests/conftest.py). Service
-    # containers only run on Linux runners; macOS runs Tika from the same
-    # JAR the toolbox itself downloads (see the "Start Tika (macOS)" step).
-    services:
-      tika:
-        image: apache/tika:latest
-        ports:
-          - 9998:9998
-        options: >-
-          --health-cmd "curl -f http://localhost:9998/ || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 6
-
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +42,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .
-          pip install pytest pytest-nbmake
+          pip install pytest
 
       - name: Install spaCy models
         run: |
@@ -67,10 +52,13 @@ jobs:
       - name: Provision NLTK data
         run: python -m nltk.downloader punkt_tab averaged_perceptron_tagger_eng wordnet stopwords
 
-      # Tika on macOS: no Docker service containers on macOS runners, so
-      # start the same tika-server.jar the toolbox downloads for itself.
-      - name: Start Tika (macOS)
-        if: runner.os == 'macOS'
+      # No Docker service container: GitHub's macOS-hosted runners have no
+      # Docker daemon at all, and a job-level `services:` block can't be
+      # scoped to one OS in a matrix, so it would break every macOS run
+      # before any of our own steps even started. Starting the same
+      # tika-server.jar the toolbox downloads for itself works on both
+      # ubuntu-latest and macos-14, since Java 17 is already set up above.
+      - name: Start Tika
         run: |
           curl -sSL -o /tmp/tika-server.jar https://distantreader.org/apps/tika-server.jar
           nohup java -jar /tmp/tika-server.jar > /tmp/tika.log 2>&1 &
@@ -84,7 +72,6 @@ jobs:
           HOME: ${{ runner.temp }}
         run: pytest tests -v
 
-  # notebooks are not yet parameterized for a CI-sized carrel (Plan B5);
   # 35 of 45 notebooks are fixed and locally verified green (B5). The other
   # 10 call rdr.download()/rdr.catalog(location='remote') against the real
   # public library at distantreader.org and need outbound network access to
@@ -120,7 +107,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[notebooks]
-          pip install pytest pytest-nbmake
+          pip install pytest nbmake
 
       - name: Install spaCy models and NLTK data
         run: |
