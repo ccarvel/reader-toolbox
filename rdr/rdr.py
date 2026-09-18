@@ -13,8 +13,6 @@
 # constants for topic modeling
 MODELDIR        = 'etc/topic-model'
 VECTORS         = 'model.vec'
-TXT2VEC         = "%s/bin/mallet import-dir --input %s --output %s --keep-sequence TRUE --stoplist-file %s"
-VEC2MODEL       = "%s/bin/mallet train-topics --input %s --num-topics %s --num-top-words %s --num-top-docs %s --num-iterations %s --num-threads 48 --optimize-interval 10 --output-doc-topics %s/topics.tsv --output-state %s/model-state.gz --output-topic-docs %s/documents.txt --output-topic-keys %s/keys.tsv --topic-word-weights-file %s/weights.tsv --word-topic-counts-file %s/counts.txt --xml-topic-phrase-report %s/phrases.xml --diagnostics-file %s/diagnostics.xml --xml-topic-report %s/topics.xml"
 KEYS            = 'keys.tsv'
 KEYSHEADER      = [ 'ids', 'weights', 'features' ]
 DOCUMENTS       = 'documents.txt'
@@ -29,6 +27,7 @@ LABELS          = [ 'docId', 'file' ]
 
 # require
 from rdr import *
+from rdr import _writeConfigurations
 
 
 def _makeSummary( keys, header ) :
@@ -89,19 +88,15 @@ def _checkForMallet( mallet ) :
 		
 		# initialize
 		click.echo( "\n  INFO: Updating configurations... " )
-		configurations          = ConfigParser()
-		applicationDirectory    = Path.home()
-		configurationFile       = applicationDirectory/CONFIGURATIONFILE
 		localLibrary            = configuration( 'localLibrary' )
 		tikaHome                = configuration( 'tikaHome' )
 		notebooksHome           = configuration( 'notebooksHome' )
 		malletHome              = Path.home()/'mallet'
-		configurations[ "RDR" ] = { "localLibrary"  : localLibrary, "malletHome" : malletHome, "tikaHome" : tikaHome, 'notebooksHome' : notebooksHome }
-		with open( str( configurationFile ), 'w' ) as handle : configurations.write( handle )
+		_writeConfigurations( localLibrary, malletHome, tikaHome, notebooksHome )
 
 		# make mallet executable
 		click.echo( "\n  INFO: Making MALLET executable... " )
-		(malletHome/MALLETBIN).chmod( 0x755 )
+		(malletHome/MALLETBIN).chmod( 0o755 )
 
 		# done
 		click.echo('''
@@ -120,10 +115,19 @@ def _pivot( localLibrary, carrel, field, keys ) :
 	
 	# initialize
 	db         = str( localLibrary/carrel/ETC/DATABASE )
-	sql        = ( SQL % ( str( localLibrary ), carrel, field, field ) )
 	metadata   = str( localLibrary/carrel/MODELDIR/METADATA )
 	topics     = str( localLibrary/carrel/MODELDIR/TOPICS )
 	connection = sqlite3.connect( db )
+
+	# validate field against this carrel's actual bib columns; the
+	# old hard-coded -f choices ('use', 'track', 'year', ...) mostly
+	# named columns _file2bib() never populated
+	columns = [ row[ 1 ] for row in connection.execute( 'PRAGMA table_info( bib );' ) ]
+	if field not in columns :
+		click.echo( f"Error: '{ field }' is not a field in this carrel's bib table. Available fields: { ', '.join( columns ) }.", err=True )
+		exit()
+
+	sql = ( SQL % ( str( localLibrary ), carrel, field, field ) )
 
 	# search and save; should probably eliminate the I/O
 	results    = pd.read_sql_query( sql, connection )
@@ -133,8 +137,9 @@ def _pivot( localLibrary, carrel, field, keys ) :
 	topics   = pd.read_csv( topics, sep='\t' )	
 	metadata = pd.read_csv( metadata )
 	
-	# create generic labels
-	labels  = LABELS
+	# create generic labels; a fresh copy, so appending to it below
+	# doesn't mutate the shared module-level LABELS constant
+	labels  = list( LABELS )
 	columns = topics.shape[ 1 ]
 	for i in range( 0, columns - 2 ) :
 
@@ -310,7 +315,7 @@ def cmdAdr( carrel, count, like ) :
 @click.command( options_metavar='<options>' )
 @click.argument( 'carrel', metavar='<carrel>' )
 @click.option('-f', '--format', default='text', type=click.Choice( [ 'text', 'json' ] ), help='type of output')
-@click.option('-v', '--save', is_flag=False, help='save result in default location')
+@click.option('-v', '--save', is_flag=True, help='save result in default location')
 def cmdBib( carrel, format, save ) :
 
 	"""Output rudimentary bibliographics from <carrel>
@@ -325,8 +330,8 @@ def cmdBib( carrel, format, save ) :
 	  rdr info --help
 	  rdr search --help"""
 
-	if save : bibliography( carrel, format, save )
-	else    : click.echo( bibliography( carrel, None, format ) )
+	if save : bibliography( carrel, format=format, save=save )
+	else    : click.echo( bibliography( carrel, format=format ) )
 
 
 # download
@@ -384,12 +389,13 @@ def cmdZip( carrel ) :
 @click.option('-q', '--query', default='love', type=click.STRING, help="filter results to include the given regular expression")
 @click.option('-p', '--process', default='list', type=click.Choice( [ 'list', 'filter', 'define' ] ), help="type of work to do" )
 @click.option('-v', '--save', is_flag=True, help='write output to default location')
-def cmdSentences( carrel, process, query='love', save=False ) :
+@click.option('-r', '--refresh', is_flag=True, help='rebuild the cached sentences even if none of its inputs have changed')
+def cmdSentences( carrel, process, query='love', save=False, refresh=False ) :
 
 	'''Given <carrel> save, output, and process sentences'''
-	
+
 	# do the work
-	sentences( carrel, process, query, save )
+	sentences( carrel, process, query, save, refresh=refresh )
 
 
 # reconcile, create RDF, and graph
@@ -432,8 +438,9 @@ def cmdCatalog( human, location ) :
 @click.command( options_metavar='<options>' )
 @click.option('-o', '--output', default='human', type=click.Choice( [ 'human', 'csv', 'tsv', 'json', 'count' ] ), help='the format of the results')
 @click.option('-q', '--query', default='love', help='a full text query')
+@click.option('-r', '--refresh', is_flag=True, help='rebuild the search index even if none of its inputs have changed')
 @click.argument( 'carrel', metavar='<carrel>' )
-def cmdSearch( query, output, carrel ) :
+def cmdSearch( query, output, carrel, refresh=False ) :
 
 	'''Perform a full text query against <carrel>
 	
@@ -447,7 +454,7 @@ def cmdSearch( query, output, carrel ) :
 	  rdr search -q '"keep his anger"' homer'''
 
 	# do the work and done
-	click.echo( search( carrel, query=query, output=output ) )
+	click.echo( search( carrel, query=query, output=output, refresh=refresh ) )
 
 
 # word2vec
@@ -456,7 +463,8 @@ def cmdSearch( query, output, carrel ) :
 @click.option('-t', '--type', default='similarity', type=click.Choice( [ 'similarity', 'distance', 'analogy', 'scatter' ], case_sensitive=True ), help="query type")
 @click.option('-q', '--query', default='love', help='the word(s) to be used for search')
 @click.option('-s', '--size', default=10, help='number of results to return')
-def cmdSemantics( carrel, type, query, size ) :
+@click.option('-r', '--refresh', is_flag=True, help='rebuild the word embeddings even if none of its inputs have changed')
+def cmdSemantics( carrel, type, query, size, refresh=False ) :
 
 	'''Apply semantic indexing against <carrel>
 	
@@ -472,7 +480,7 @@ def cmdSemantics( carrel, type, query, size ) :
 	  rdr semantics -t analogy -q "king queen prince" homer'''
 
 	# do the work and done
-	click.echo( word2vec( carrel, type=type, query=query, topn=size ) )
+	click.echo( word2vec( carrel, type=type, query=query, topn=size, refresh=refresh ) )
 
 	
 ## collocations
@@ -511,8 +519,9 @@ def cmdSemantics( carrel, type, query, size ) :
 @click.option('-l', '--lemma',   default='be', help="only applicable to sss; the lemma of a verb, such as 'be' (default), 'have', or 'say'")
 @click.option('-s', '--sort',    is_flag=True, help='order the results alphabetically')
 @click.option('-c', '--count',   is_flag=True, help='tabulate the items in the result')
+@click.option('-r', '--refresh', is_flag=True, help='rebuild the cached spaCy doc even if none of its inputs have changed')
 @click.argument( 'carrel', metavar='<carrel>' )
-def cmdGrammars( carrel, grammar, query, noun, lemma, sort, count ) :
+def cmdGrammars( carrel, grammar, query, noun, lemma, sort, count, refresh=False ) :
 
 	"""Extract sentence fragments from <carrel> as in:
 	
@@ -534,7 +543,7 @@ def cmdGrammars( carrel, grammar, query, noun, lemma, sort, count ) :
 	  rdr grammars -g sss -n hector -l be homer"""
 	
 	# do the work
-	click.echo( grammars( carrel, grammar, query, noun, lemma, sort, count ) )
+	click.echo( grammars( carrel, grammar, query, noun, lemma, sort, count, refresh ) )
 	
 
 # cluster
@@ -1292,7 +1301,7 @@ def cmdSummarize( carrel, look ) :
 @click.option('-w', '--words', default=8, help="number of words used to describe topic" )
 @click.option('-i', '--iterations', default=2400, help="number of times to cacluate" )
 @click.option('-o', '--output', default='summary', type=click.Choice( [ 'summary', 'chart', 'topdocs', 'csv' ] ), help="type of report" )
-@click.option('-f', '--field', type=click.Choice( [ 'use', 'author', 'title', 'date', 'track', 'category', 'type', 'year', 'journal', 'topic', 'college', 'discipline', 'degree', 'pub_place' , 'region' ] ), help="field for pivoting" )
+@click.option('-f', '--field', type=click.STRING, help="field for pivoting; must be an actual column of this carrel's bib table (see 'rdr bib --help')" )
 @click.option('-y', '--type', default='pie', type=click.Choice( [ 'pie', 'bar', 'barh', 'line', 'scatter' ] ), help="type of chart" )
 @click.argument( 'carrel', metavar='<carrel>' )
 def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
@@ -1312,6 +1321,7 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 	from pathlib import Path
 	import matplotlib.pyplot as plot
 	import os
+	import subprocess
 	import sys
 	import pandas as pd
 	from   sklearn.manifold  import TSNE
@@ -1329,23 +1339,41 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 	vectors      = str( localLibrary/carrel/MODELDIR/VECTORS )
 	keys         = str( localLibrary/carrel/MODELDIR/KEYS )
 	documents    = str( localLibrary/carrel/MODELDIR/DOCUMENTS )
-	
+	binary       = mallet + '/' + MALLETBIN
+	threads      = str( min( os.cpu_count() or 1, 48 ) )
+
 	# make sane for Windows
 	os.environ[ 'MALLET_HOME' ] = mallet
-	
+
 	# create a model
 	if process == 'model' :
-	
+
 		#  make sane
 		Path( modeldir ).mkdir( exist_ok=True )
 
-		# create vectors
-		command = ( TXT2VEC % ( mallet, corpus, vectors, stopwords ) )	
-		os.system( command )
-	
+		# create vectors; a list of args (not a shell string) so a
+		# carrel name or path with spaces or shell metacharacters
+		# can't break or inject into the MALLET invocation
+		subprocess.run( [ binary, 'import-dir', '--input', corpus, '--output', vectors, '--keep-sequence', 'TRUE', '--stoplist-file', stopwords ], check=True )
+
 		# topic model
-		command = ( VEC2MODEL % ( mallet, vectors, topics, words, TOPDOCS, iterations, modeldir, modeldir, modeldir, modeldir, modeldir, modeldir,  modeldir, modeldir, modeldir ) )
-		os.system( command )
+		subprocess.run( [ binary, 'train-topics',
+		                   '--input', vectors,
+		                   '--num-topics', str( topics ),
+		                   '--num-top-words', str( words ),
+		                   '--num-top-docs', str( TOPDOCS ),
+		                   '--num-iterations', str( iterations ),
+		                   '--num-threads', threads,
+		                   '--optimize-interval', '10',
+		                   '--output-doc-topics', modeldir + '/topics.tsv',
+		                   '--output-state', modeldir + '/model-state.gz',
+		                   '--output-topic-docs', modeldir + '/documents.txt',
+		                   '--output-topic-keys', modeldir + '/keys.tsv',
+		                   '--topic-word-weights-file', modeldir + '/weights.tsv',
+		                   '--word-topic-counts-file', modeldir + '/counts.txt',
+		                   '--xml-topic-phrase-report', modeldir + '/phrases.xml',
+		                   '--diagnostics-file', modeldir + '/diagnostics.xml',
+		                   '--xml-topic-report', modeldir + '/topics.xml' ], check=True )
 
 		# summarize and output
 		keys = _makeSummary( keys, KEYSHEADER )
@@ -1420,8 +1448,10 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 				topics = str( localLibrary/carrel/MODELDIR/TOPICS )
 				topics = pd.read_csv( topics, sep='\t' )
 
-				# create generic labels
-				labels  = LABELS
+				# create generic labels; a fresh copy, so appending to it
+				# below doesn't mutate the shared module-level LABELS
+				# constant
+				labels  = list( LABELS )
 				columns = topics.shape[ 1 ]
 				for i in range( 0, columns - 2 ) :
 
@@ -1462,19 +1492,29 @@ def cmdTm( carrel, process, topics, words, iterations, output, field, type ) :
 					topics.rename( columns = { column:label }, inplace=True )
 				
 				# rotate the topics and convert to array
-				topics = topics.T
-				topics = topics.to_numpy()
-				
-				# specify type of TSNE modeling, and then model
-				tsne   = TSNE( perplexity=1024, init='pca', learning_rate='auto' )
-				model  = tsne.fit_transform( topics )
-				
-				# plot
-				x = model[ :, 0 ]
-				y = model[ :, 1 ]
-				plot.scatter( x, y )
-				for i, label in enumerate( labels ) : plot.annotate( label, ( x[ i ], y[ i ] ) )
-				plot.show()
+				topics   = topics.T
+				topics   = topics.to_numpy()
+				n_topics = topics.shape[ 0 ]
+
+				# TSNE requires 0 < perplexity < n_samples (here, the
+				# number of topics); a hard-coded 1024 always failed
+				if n_topics < 3 :
+
+					click.echo( f"Error: scatter needs at least 3 topics to visualize (this carrel has { n_topics }). Rerun 'rdr tm' with a larger -t.", err=True )
+
+				else :
+
+					# specify type of TSNE modeling, and then model
+					perplexity = min( 30, n_topics - 1 )
+					tsne       = TSNE( perplexity=perplexity, init='pca', learning_rate='auto' )
+					model      = tsne.fit_transform( topics )
+
+					# plot
+					x = model[ :, 0 ]
+					y = model[ :, 1 ]
+					plot.scatter( x, y )
+					for i, label in enumerate( labels ) : plot.annotate( label, ( x[ i ], y[ i ] ) )
+					plot.show()
 				
 			if type == 'line' or type == 'bar' or type == 'barh' :
 			

@@ -741,15 +741,46 @@ def graph2gml( carrel, output='gml', save=False, erase=False, localLibrary=None 
 
 
 # given the name of a carrel, output sentences
-def sentences( carrel, process='list', query='love', save=True ) :
+def _ensureNLTKData() :
+
+	'''Download the NLTK data packages this toolbox depends on
+	(punkt_tab for tokenization, averaged_perceptron_tagger_eng for
+	POS tagging, wordnet for word-sense disambiguation) the first
+	time they're needed, with a stderr notice. Safe to call on every
+	invocation; already-installed packages are a cheap local check.'''
+
+	# require
+	import nltk
+	import sys
+
+	# configure
+	PACKAGES = { 'punkt_tab'                      : 'tokenizers/punkt_tab',
+				 'averaged_perceptron_tagger_eng' : 'taggers/averaged_perceptron_tagger_eng',
+				 'wordnet'                        : 'corpora/wordnet' }
+
+	# process each package; download only what is actually missing
+	for package, resource in PACKAGES.items() :
+
+		try    : nltk.data.find( resource )
+		except LookupError :
+
+			sys.stderr.write( f"INFO: Downloading NLTK data package '{ package }' (first use only)...\n" )
+			nltk.download( package, quiet=True )
+
+
+def sentences( carrel, process='list', query='love', save=True, refresh=False ) :
 
 	# configure
 	PATTERN = '*.txt'
-	
+	KEY     = 'sentences'
+
 	# require
 	import rdr
 	import multiprocessing
 	from nltk.wsd import lesk
+
+	# make sure the NLTK data this function needs is available
+	_ensureNLTKData()
 
 	# configure
 	library   = configuration( 'localLibrary' )
@@ -758,7 +789,7 @@ def sentences( carrel, process='list', query='love', save=True ) :
 
 	checkForCarrel( carrel )
 
-	if not sentences.exists() :
+	if not sentences.exists() or refresh or _cacheIsStale( carrel, library, KEY ) :
 	
 		# parallel process each plain text file in the given corpus
 		pool    = multiprocessing.Pool()
@@ -777,6 +808,7 @@ def sentences( carrel, process='list', query='love', save=True ) :
 				for sentence in result : handle.write( '%s\n' % sentence )
 
 		# done
+		_cacheRecord( carrel, library, KEY )
 		click.echo( 'Done.', err=True )
 
 	if process == 'list' and save == False :
@@ -1273,6 +1305,28 @@ def initializeConfigurations() :
 	( Path.home()/READERLIBRARY ).mkdir( exist_ok=True )
 
 
+def _writeConfigurations( localLibrary, malletHome, tikaHome, notebooksHome ) :
+
+	'''Given the Toolbox's four configuration values, write all of
+	them to the configuration file together. Returns nothing.'''
+
+	# require
+	from configparser import ConfigParser
+	from pathlib      import Path
+
+	# initialize
+	configurations       = ConfigParser()
+	applicationDirectory = Path.home()
+	configurationFile    = applicationDirectory/CONFIGURATIONFILE
+
+	# save them, all four, every time
+	configurations[ "RDR" ] = { "localLibrary"  : str( localLibrary ),
+								"malletHome"    : str( malletHome ),
+								"notebooksHome" : str( notebooksHome ),
+								"tikaHome"      : str( tikaHome ) }
+	with open( str( configurationFile ), 'w', encoding='utf-8' ) as handle : configurations.write( handle )
+
+
 def configuration( name ) :
 
 	'''Given a configuration name (localLibrary, malletHome,
@@ -1285,18 +1339,19 @@ def configuration( name ) :
 
 	# initialize
 	applicationDirectory = Path.home()
-	configurationFile    = applicationDirectory/CONFIGURATIONFILE	
+	configurationFile    = applicationDirectory/CONFIGURATIONFILE
 	configurations       = ConfigParser()
-	
+
 	# read configurations file
 	configurations.read( str( configurationFile ) )
-	
-	# get configurations
-	localLibrary  = configurations[ 'RDR' ][ 'localLibrary' ]
-	malletHome    = configurations[ 'RDR' ][ 'malletHome' ] 
-	tikaHome      = configurations[ 'RDR' ][ 'tikaHome' ] 
-	notebooksHome = configurations[ 'RDR' ][ 'notebooksHome' ] 
-	
+
+	# get configurations, falling back to initializeConfigurations()'s
+	# defaults for any key a stale or partially-written file is missing
+	localLibrary  = configurations.get( 'RDR', 'localLibrary',  fallback=str( Path.home()/READERLIBRARY ) )
+	malletHome    = configurations.get( 'RDR', 'malletHome',    fallback=str( Path.home()/MALLETHOME ) )
+	tikaHome      = configurations.get( 'RDR', 'tikaHome',      fallback=str( Path.home()/TIKAHOME ) )
+	notebooksHome = configurations.get( 'RDR', 'notebooksHome', fallback=str( Path.home()/NOTEBOOKSHOME ) )
+
 	# done
 	if   name == 'localLibrary'  : return( Path( localLibrary ) )
 	elif name == 'malletHome'    : return( Path( malletHome ) )
@@ -1309,6 +1364,24 @@ def configuration( name ) :
 		exit()
 		
 
+def _spacyModelWheelURL( model ) :
+
+	'''Given a spaCy model name, return the exact wheel URL for the
+	version compatible with the installed spaCy, suitable for
+	'uv pip install <url>' when pip isn't available in this
+	interpreter.'''
+
+	# require
+	from spacy               import about
+	from spacy.cli.download  import get_compatibility, get_version, get_model_filename
+
+	compatibility = get_compatibility()
+	version       = get_version( model, compatibility )
+	filename      = get_model_filename( model, version )
+
+	return about.__download_url__ + '/' + filename
+
+
 def modelNotFound() :
 
 	'''When a spaCy model (as defined by the contants
@@ -1316,32 +1389,53 @@ def modelNotFound() :
 	called. It prompts the user for a y or n answer, and if the
 	answer is y, then the models are downloaded and installed. This
 	function exits the application after being called.'''
-	
+
 	# notify
 	click.echo( "Error: Langauge models not found.", err=True )
 	click.echo()
 	click.echo( f"This functions requires one of two different spaCy langauge models ({ MODELSMALL } and { MODELMEDIUM }) to be installed. This only has to be done once, and after the models have been installed you can run the command again.", err=True )
 	click.echo()
 	click.echo( 'Do you want to install the models now? [yn] ', err=True, nl=False )
-	
+
 	# get input
 	c = click.getchar()
 	click.echo()
-	
+
 	# branch accordingly; yes
 	if c == 'y' :
 
-		# require and do the work
-		from os import system
-		system( 'python -m spacy download ' + MODELSMALL )
-		system( 'python -m spacy download ' + MODELMEDIUM )
-	
+		# require
+		import importlib.util
+		import shutil
+		import subprocess
+		import sys
+
+		# always target this interpreter, not whatever "python" the
+		# calling shell happens to resolve to (which may not even be
+		# the interpreter rdr is running under, e.g. under uv)
+		if importlib.util.find_spec( 'pip' ) is not None :
+
+			subprocess.run( [ sys.executable, '-m', 'spacy', 'download', MODELSMALL ] )
+			subprocess.run( [ sys.executable, '-m', 'spacy', 'download', MODELMEDIUM ] )
+
+		# no pip in this interpreter (common in a bare `uv venv`);
+		# print the exact uv pip install command instead of failing
+		# with a cryptic "No module named pip"
+		elif shutil.which( 'uv' ) :
+
+			click.echo( "No pip found in this interpreter. Run these instead:\n", err=True )
+			for model in ( MODELSMALL, MODELMEDIUM ) : click.echo( '  uv pip install ' + _spacyModelWheelURL( model ), err=True )
+
+		else :
+
+			click.echo( "Neither pip nor uv is available in this interpreter. Install one of them and try again.", err=True )
+
 	# no
 	elif c == 'n' : click.echo( "Okay, but installing the model is necessary for this function to work. You'll be asked again next time.", err=True )
 
 	# error
 	else : click.echo( '???' )
-	
+
 	# done
 	exit()
 
@@ -1375,7 +1469,76 @@ def checkForCarrel( carrel, localLibrary=None ) :
 ''' % carrel ), err=True )
 		exit()
 
-	
+
+CACHESIGNATURES = 'cache.json'
+
+def _cacheSignature( carrel, localLibrary ) :
+
+	'''Given the name of a study carrel, compute a signature for the
+	inputs that derived caches (semantics, grammars, sentences,
+	search) depend on: a SHA-256 of stopwords.txt plus the newest
+	mtime under txt/. Returns a dict suitable for JSON storage.'''
+
+	# require
+	from hashlib import sha256
+
+	# initialize
+	stopwords = localLibrary/carrel/ETC/STOPWORDS
+	txt       = localLibrary/carrel/TXT
+
+	# hash the stopword list, if there is one
+	digest = sha256()
+	if stopwords.exists() : digest.update( stopwords.read_bytes() )
+
+	# find the newest mtime under txt/, if there is a txt/
+	mtime = 0.0
+	if txt.is_dir() :
+		for file in txt.glob( '*.txt' ) : mtime = max( mtime, file.stat().st_mtime )
+
+	return { 'stopwords' : digest.hexdigest(), 'txt_mtime' : mtime }
+
+
+def _cacheIsStale( carrel, localLibrary, key ) :
+
+	'''Given the name of a study carrel and a cache key (semantics,
+	grammars, sentences, or search), return True if the carrel's
+	current signature disagrees with what was last recorded for that
+	key in etc/cache.json, or if nothing was recorded yet.'''
+
+	# require
+	import json
+
+	# initialize
+	cacheFile = localLibrary/carrel/ETC/CACHESIGNATURES
+	current   = _cacheSignature( carrel, localLibrary )
+
+	if not cacheFile.exists() : return True
+
+	try    : recorded = json.loads( cacheFile.read_text( encoding='utf-8' ) )
+	except ( json.JSONDecodeError, OSError ) : return True
+
+	return recorded.get( key ) != current
+
+
+def _cacheRecord( carrel, localLibrary, key ) :
+
+	'''Given the name of a study carrel and a cache key, record the
+	carrel's current signature under that key in etc/cache.json, so
+	the next call to _cacheIsStale() for that key can detect drift.'''
+
+	# require
+	import json
+
+	# initialize
+	cacheFile = localLibrary/carrel/ETC/CACHESIGNATURES
+
+	try    : recorded = json.loads( cacheFile.read_text( encoding='utf-8' ) )
+	except ( FileNotFoundError, json.JSONDecodeError ) : recorded = {}
+
+	recorded[ key ] = _cacheSignature( carrel, localLibrary )
+	cacheFile.write_text( json.dumps( recorded ), encoding='utf-8' )
+
+
 # create a word cloud
 def cloud( frequencies, **kwargs ) :
 
@@ -1525,8 +1688,8 @@ def bibliography( carrel, localLibrary=None, format='text', save=False ) :
 
 	# query database
 	sql  = '''SELECT b.id, b.words, b.extension, b.flesch, b.author, b.title, b.date, GROUP_CONCAT( LOWER( w.keyword ), '; ') AS keywords, b.summary, b.mime
-			  FROM bib AS b, wrd AS w
-			  WHERE b.id = w.id
+			  FROM bib AS b
+			  LEFT JOIN wrd AS w ON b.id = w.id
 			  GROUP BY b.id
 			  ORDER BY b.id, LOWER( b.author );'''
 	rows  = connection.execute( sql )
@@ -1628,20 +1791,21 @@ def addresses( carrel, count=False, like=None ) :
 
 		# articulate sql
 		if like :
-		
-			sql = ( '''SELECT DISTINCT( LOWER( address ) ) AS address
-			           FROM adr
-			           WHERE address LIKE "%s"
-			           ORDER BY address;''' % ('%' + like + '%' ) )
-			
+
+			sql  = '''SELECT DISTINCT( LOWER( address ) ) AS address
+			          FROM adr
+			          WHERE address LIKE ?
+			          ORDER BY address;'''
+			rows = connection.execute( sql, ( '%' + like + '%', ) )
+
 		else :
-		
+
 			sql  = '''SELECT DISTINCT( LOWER( address ) ) AS address
 			          FROM adr
 			          ORDER BY address;'''
+			rows = connection.execute( sql )
 
 		# do the work and build the result
-		rows = connection.execute( sql )
 		for row in rows : items.append( row[ 'address' ]  )
 
 	# count and tabulate the dump
@@ -1649,23 +1813,24 @@ def addresses( carrel, count=False, like=None ) :
 	
 		# articulate sql
 		if like :
-		
-			sql = ( '''SELECT LOWER( address ) AS address, COUNT( LOWER( address ) ) AS count
-			           FROM adr
-			           WHERE address LIKE "%s"
-			           GROUP BY LOWER( address )
-			           ORDER BY count DESC, address;''' % ('%' + like + '%' ) )
-			
+
+			sql  = '''SELECT LOWER( address ) AS address, COUNT( LOWER( address ) ) AS count
+			          FROM adr
+			          WHERE address LIKE ?
+			          GROUP BY LOWER( address )
+			          ORDER BY count DESC, address;'''
+			rows = connection.execute( sql, ( '%' + like + '%', ) )
+
 		else :
-		
+
 			sql  = '''SELECT LOWER( address ) AS address, COUNT( LOWER( address ) ) AS count
 			          FROM adr
 			          GROUP BY LOWER( address )
 			          ORDER BY count DESC, address;'''
+			rows = connection.execute( sql )
 
 		# do the work and build the result
-		rows = connection.execute( sql )
-		for row in rows : items.append( "\t".join( [ row[ 'address' ], str( row[ 'count' ] ) ] ) )		
+		for row in rows : items.append( "\t".join( [ row[ 'address' ], str( row[ 'count' ] ) ] ) )
 
 	# clean up and done
 	connection.close()
@@ -1698,18 +1863,20 @@ def urls( carrel, select='url', count=False, like=None ) :
 		
 			# simple filter
 			if like :
-			
+
 				# articulate sql
-				sql = ( '''SELECT DISTINCT( url ) AS url
-				           FROM url
-				           WHERE url LIKE "%s"
-				           ORDER BY url;''' % ( '%' + like + '%' ) )
+				sql  = '''SELECT DISTINCT( url ) AS url
+				          FROM url
+				          WHERE url LIKE ?
+				          ORDER BY url;'''
+				rows = connection.execute( sql, ( '%' + like + '%', ) )
 
 			# just dump; articulate sql
-			else : sql = 'SELECT DISTINCT( url ) AS url FROM url ORDER BY url;'
+			else :
+				sql  = 'SELECT DISTINCT( url ) AS url FROM url ORDER BY url;'
+				rows = connection.execute( sql )
 
 			# do the work and output
-			rows = connection.execute( sql )
 			for row in rows : items.append( row[ 'url' ] )
 
 		# count
@@ -1717,25 +1884,26 @@ def urls( carrel, select='url', count=False, like=None ) :
 		
 			# simple filtering
 			if like :
-			
+
 				# articulate sql
-				sql = ( '''SELECT DISTINCT( url ) AS url, COUNT( DISTINCT( url ) ) AS count
-				           FROM url
-				           WHERE url LIKE '%s'
-				           GROUP BY url
-				           ORDER BY count DESC;''' % ( '%' + like + '%' ) )
-				            
+				sql  = '''SELECT url, COUNT( * ) AS count
+				          FROM url
+				          WHERE url LIKE ?
+				          GROUP BY url
+				          ORDER BY count DESC;'''
+				rows = connection.execute( sql, ( '%' + like + '%', ) )
+
 			# no filtering
 			else :
 
 				# articulate sql
-				sql = '''SELECT DISTINCT( url ) AS url, COUNT( DISTINCT( url ) ) As count
-				         FROM url
-				         GROUP BY url
-				         ORDER BY count DESC;'''
+				sql  = '''SELECT url, COUNT( * ) AS count
+				          FROM url
+				          GROUP BY url
+				          ORDER BY count DESC;'''
+				rows = connection.execute( sql )
 
 			# do the work and output
-			rows = connection.execute( sql )
 			for row in rows : items.append( "\t".join( [ row[ 'url' ], str( row[ 'count' ] ) ] ) )
 			
 	# domains; count and tabulate the dump
@@ -1746,44 +1914,47 @@ def urls( carrel, select='url', count=False, like=None ) :
 		
 			# filter
 			if like :
-			
+
 				# articulate sql, search, and output
-				sql = ( '''SELECT LOWER( DISTINCT( domain ) ) AS domain
-				           FROM url
-				           WHERE url LIKE '%s'
-				           ORDER BY domain;''' % ( '%' + like + '%' ) )
+				sql  = '''SELECT DISTINCT LOWER( domain ) AS domain
+				          FROM url
+				          WHERE url LIKE ?
+				          ORDER BY domain;'''
+				rows = connection.execute( sql, ( '%' + like + '%', ) )
 
 			# no filtering
-			else : sql = 'SELECT LOWER( DISTINCT( domain ) ) AS domain FROM url ORDER BY domain;'
+			else :
+				sql  = 'SELECT DISTINCT LOWER( domain ) AS domain FROM url ORDER BY domain;'
+				rows = connection.execute( sql )
 
 			# do the work and output
-			rows = connection.execute( sql )
-			for row in rows : item.append( row[ 'domain' ] )
+			for row in rows : items.append( row[ 'domain' ] )
 		
 		# count and tabulate
 		else :
 		
 			# filter
 			if like :
-			
+
 				# articulate sql, search, and output
-				sql = ( '''SELECT LOWER( DISTINCT( domain ) ) AS domain, COUNT( LOWER( DISTINCT( domain ) ) ) AS count
-				           FROM url
-				           WHERE domain LIKE '%s'
-				           GROUP BY domain
-				           ORDER BY count DESC, domain;''' % ( '%' + like + '%' ) )
+				sql  = '''SELECT LOWER( domain ) AS domain, COUNT( * ) AS count
+				          FROM url
+				          WHERE domain LIKE ?
+				          GROUP BY domain
+				          ORDER BY count DESC, domain;'''
+				rows = connection.execute( sql, ( '%' + like + '%', ) )
 
 			# no filtering
 			else :
-			
+
 				# articulate sql, search, and output
-				sql = '''SELECT LOWER( DISTINCT( domain ) ) AS domain, COUNT( LOWER( DISTINCT( domain ) ) ) AS count
-				         FROM url
-				         GROUP BY domain
-				         ORDER BY count DESC, domain;'''
-				         
+				sql  = '''SELECT LOWER( domain ) AS domain, COUNT( * ) AS count
+				          FROM url
+				          GROUP BY domain
+				          ORDER BY count DESC, domain;'''
+				rows = connection.execute( sql )
+
 			# do the work and output
-			rows = connection.execute( sql )
 			for row in rows : items.append( "\t".join( [ row[ 'domain' ], str( row[ 'count' ] ) ] ) )
 			
 	# clean up and done
@@ -1938,7 +2109,7 @@ def sizes( carrel, localLibrary=None, sort='words', output='list', save=False ) 
 	programmer interface. My bad.'''
 
 	# configure
-	WORDS   = 'SELECT id, words FROM bib ORDER BY words DESC'
+	WORDS   = 'SELECT id, words FROM bib ORDER BY CAST( words AS INTEGER ) DESC'
 	ID      = 'SELECT id, words FROM bib ORDER BY id ASC'
 	COLUMNS = [ 'sizes in words' ]
 	
@@ -2027,7 +2198,7 @@ def flesch( carrel, localLibrary=None, sort='score', output='list', save=False) 
 	programmer interface. My bad.'''
 
 	# configure
-	SCORE   = 'SELECT id, flesch FROM bib ORDER BY flesch DESC'
+	SCORE   = 'SELECT id, flesch FROM bib ORDER BY CAST( flesch AS INTEGER ) DESC'
 	ID      = 'SELECT id, flesch FROM bib ORDER BY id ASC'
 	COLUMNS = [ 'readability' ]
 	
@@ -2121,7 +2292,10 @@ def ngrams( carrel, localLibrary=None, size=1, query=None, count=False, location
 	from requests import get
 	import nltk
 	from pathlib import Path
-	
+
+	# make sure the NLTK data this function needs is available
+	_ensureNLTKData()
+
 	if localLibrary : localLibrary = Path( localLibrary )
 	else            : localLibrary = configuration( 'localLibrary' )
 
@@ -2318,17 +2492,17 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 		if not count :
 
 			# articulate sql, search, and output
-			sql  = ( "SELECT pos FROM pos WHERE pos LIKE '%s';" % like )
-			rows = connection.execute( sql )
+			sql  = "SELECT pos FROM pos WHERE pos LIKE ?;"
+			rows = connection.execute( sql, ( like, ) )
 			for row in rows : items.append( row[ 'pos' ] )
 
 		# count and tabulate the dump
 		else :
-		
+
 			# articulate sql, search, and output
-			sql  = ( "SELECT pos, COUNT( pos ) AS count FROM pos WHERE pos LIKE '%s' GROUP BY pos ORDER BY count DESC;" % like )
-			rows = connection.execute( sql )
-			for row in rows : items.append( "\t".join( [ row[ 'pos' ], str( row[ 'count' ] ) ] ) )			
+			sql  = "SELECT pos, COUNT( pos ) AS count FROM pos WHERE pos LIKE ? GROUP BY pos ORDER BY count DESC;"
+			rows = connection.execute( sql, ( like, ) )
+			for row in rows : items.append( "\t".join( [ row[ 'pos' ], str( row[ 'count' ] ) ] ) )
 			
 	# words or lemmas
 	else : 
@@ -2345,11 +2519,11 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 		if not count :
 		
 			# build sql
-			if not normalize : sql = ( 'SELECT %s FROM pos WHERE pos LIKE "%s";' % ( select, like ) )
-			else : sql = ( 'SELECT LOWER( %s ) AS %s FROM pos WHERE pos LIKE "%s";' % ( select, select, like ) )
-						
+			if not normalize : sql = ( 'SELECT %s FROM pos WHERE pos LIKE ?;' % select )
+			else              : sql = ( 'SELECT LOWER( %s ) AS %s FROM pos WHERE pos LIKE ?;' % ( select, select ) )
+
 			# search and process each resulting row
-			rows = connection.execute( sql )
+			rows = connection.execute( sql, ( like, ) )
 			for row in rows : items.append( row[ select ] )
 		
 		# count and tabulate the result
@@ -2358,19 +2532,19 @@ def pos( carrel, localLibrary=None, select='parts', like='any', count=False, nor
 			# do not lower-case words or lemmas
 			if not normalize : sql = ( '''SELECT %s AS %s, COUNT( %s ) AS count
 			                              FROM pos
-			                              WHERE pos LIKE "%s"
+			                              WHERE pos LIKE ?
 			                              GROUP BY %s
-			                              ORDER BY count DESC;''' % ( select, select, select, like, select ) )
-				
+			                              ORDER BY count DESC;''' % ( select, select, select, select ) )
+
 			# lower-case words or lemmas
 			else: sql = ( '''SELECT LOWER( %s ) AS %s, COUNT( %s ) AS count
 			                 FROM pos
-			                 WHERE pos LIKE "%s"
+			                 WHERE pos LIKE ?
 			                 GROUP BY LOWER( %s )
-			                 ORDER BY count DESC;''' % ( select, select, select, like, select ) )
-				
+			                 ORDER BY count DESC;''' % ( select, select, select, select ) )
+
 			# search and process each resulting row
-			rows = connection.execute( sql )
+			rows = connection.execute( sql, ( like, ) )
 
 			# output simple tabulation
 			if not wordcloud :
@@ -2517,22 +2691,22 @@ def entities( carrel, localLibrary=None, select='type', like='any', count=False,
 			
 		# initialize like
 		if like == 'any' : like = '%'
-		else             : like == like.upper()
+		else             : like = like.upper()
 		
 		# simply dump the desired content
 		if not count :
 		
 			# build sql, search, and output
-			sql  = ( 'SELECT entity FROM ent WHERE type LIKE "%s";' % ( like ) )
-			rows = connection.execute( sql )
+			sql  = 'SELECT entity FROM ent WHERE type LIKE ?;'
+			rows = connection.execute( sql, ( like, ) )
 			for row in rows : items.append( row[ select ] )
-		
+
 		# count and tabulate the result
 		else:
 
 			# build sql, search, and output
-			sql  = ( 'SELECT entity, COUNT( entity ) AS count FROM ent WHERE type LIKE "%s" GROUP BY entity ORDER BY count DESC;' % ( like ) )
-			rows = connection.execute( sql )
+			sql  = 'SELECT entity, COUNT( entity ) AS count FROM ent WHERE type LIKE ? GROUP BY entity ORDER BY count DESC;'
+			rows = connection.execute( sql, ( like, ) )
 			
 			# output simple tabulation
 			if not wordcloud :
@@ -2789,69 +2963,73 @@ def cluster( carrel, localLibrary=None, type='dendrogram', save=False ) :
 
 #
 # given a carrel, return a spacy doc
-def _carrel2doc( carrel ) :
+def _carrel2doc( carrel, refresh=False ) :
 
 	# configure
 	PICKLE = 'reader.spacy'
+	KEY    = 'grammars'
 
 	# require
 	from os        import path, stat
 	from spacy     import load
 	import                textacy
 	import sys
-	
+
 	# initialize
 	localLibrary = configuration( 'localLibrary' )
 	pickle       = localLibrary/carrel/ETC/PICKLE
 
-	# check to see if we've previously been here
-	if path.exists( pickle ) :
-		
+	# check to see if we've previously been here, and that nothing
+	# (stopwords, txt/) has changed since
+	if path.exists( pickle ) and not refresh and not _cacheIsStale( carrel, localLibrary, KEY ) :
+
 		# read the pickle file
 		try            : doc = next( textacy.io.spacy.read_spacy_docs( pickle, lang=MODELSMALL ) )
 		except OSError : modelNotFound()
-			
+
 	# otherwise
 	else :
-	
+
 		# warn
 		sys.stderr.write( '''Modeling study carrel data for future use. This may take many
 minutes, but it will only have to be done once. In the meantime,
 ask yourself, "Self, what is justice?"\n''' )
 
-		# initialize 
+		# initialize
 		file           = localLibrary/carrel/ETC/CORPUS
 		text           = open( str( file ) ).read()
 		size           = ( stat( file ).st_size ) + 1
-		
+
 		# initialize some more
 		try            : nlp  = load( MODELSMALL )
 		except OSError : modelNotFound()
-		
+
 		# do the work
 		nlp.max_length = size
 		doc            = nlp( text )
 
 		# save it for future use
 		textacy.io.spacy.write_spacy_docs( doc, filepath=pickle )
+		_cacheRecord( carrel, localLibrary, KEY )
 
 	# done
 	return doc
 
 
 # process grammars
-def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=False, count=False ) :
+def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=False, count=False, refresh=False ) :
 
 	# require
 	from textacy import extract
 	from os      import system
 	from re      import search
-	
+	import sys
+
 	# sanity check
 	checkForCarrel( carrel )
 
 	# initialize
-	doc = _carrel2doc( carrel )
+	doc = _carrel2doc( carrel, refresh=refresh )
 
 	# get the features; svo
 	if grammar == 'svo' :
@@ -2866,10 +3044,12 @@ def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=Fal
 			#print( help(feature ) )
 			#exit()
 
-			subject = feature.subject[ 0 ].text			
-			verb    = feature.verb[ 0 ].text
-			object  = feature.object[ 0 ].text
-			items.append(' \t'.join( [ ''.join( subject ), ''.join( verb ), ''.join( object ) ] ) )
+			# join every token in each span, in document order, not
+			# just the first token
+			subject = ' '.join( token.text for token in sorted( feature.subject, key=lambda token : token.i ) )
+			verb    = ' '.join( token.text for token in sorted( feature.verb,    key=lambda token : token.i ) )
+			object  = ' '.join( token.text for token in sorted( feature.object,  key=lambda token : token.i ) )
+			items.append(' \t'.join( [ subject, verb, object ] ) )
 
 		# done
 		features = items
@@ -2906,7 +3086,7 @@ def grammars( carrel, grammar='svo', query=None, noun=None, lemma='be', sort=Fal
 		# sanity check
 		if not noun :
 		
-			sy.stderr.write( "Error: When specifying sss, the -n option is required. See 'rdr grammars --help'\n" )
+			sys.stderr.write( "Error: When specifying sss, the -n option is required. See 'rdr grammars --help'\n" )
 			exit()
 			
 		# do the work
@@ -2996,26 +3176,31 @@ def extractTokenizedSentences( file, stopwords ) :
 
 
 # make sure the carrel has been indexed
-def checkForSemanticIndex( carrel, localLibrary ) :
+def checkForSemanticIndex( carrel, localLibrary, refresh=False ) :
 
 	# configure; not quite right
 	VECTORS = 'carrel.vec'
 	PATTERN = '*.txt'
 	TOKENS  = 'carrel.tok'
-	
+	KEY     = 'semantics'
+
 	# require
 	from multiprocessing import Pool
 	from pathlib         import Path
 	import gensim
 	import sys
 
+	# make sure the NLTK data this function needs is available
+	_ensureNLTKData()
+
 	# configure
 	#localLibrary = configuration( 'localLibrary' )
 	vectors      = localLibrary/carrel/ETC/VECTORS
 	tokens       = localLibrary/carrel/ETC/TOKENS
-	
-	# see if we have been here previously
-	if not vectors.exists() :
+
+	# see if we have been here previously, and that nothing
+	# (stopwords, txt/) has changed since
+	if not vectors.exists() or refresh or _cacheIsStale( carrel, localLibrary, KEY ) :
 
 		filenames    = localLibrary/carrel/TXT
 		stopwords    = localLibrary/carrel/ETC/STOPWORDS
@@ -3043,13 +3228,14 @@ def checkForSemanticIndex( carrel, localLibrary ) :
 
 		# save and done
 		model.wv.save( str( vectors ) )
+		_cacheRecord( carrel, localLibrary, KEY )
 
 	# done
-	return	
+	return
 
 
 # implement semantic (word2vec) indexing
-def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=10 ) :
+def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=10, refresh=False ) :
 
 	'''types = similarity|distance|analogy|scatter'''
 
@@ -3068,7 +3254,7 @@ def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=1
 	
 	# sanity checks
 	checkForCarrel( carrel, library )
-	checkForSemanticIndex( carrel, library )
+	checkForSemanticIndex( carrel, library, refresh=refresh )
 		
 	# load model
 	model = gensim.models.KeyedVectors.load( vectors )
@@ -3165,9 +3351,10 @@ def word2vec( carrel, localLibrary=None, type='similarity', query='love', topn=1
 
 
 # make sure the carrel has been indexed; sqlite++
-def _checkForIndex( carrel, localLibrary ) :
+def _checkForIndex( carrel, localLibrary, refresh=False ) :
 
 	# configure
+	KEY            = 'search'
 	SANITYCHECK    = "SELECT * FROM sqlite_master WHERE type='table' AND name='fulltext';"
 	DROPFULLTEXT   = 'DROP TABLE IF EXISTS fulltext;'
 	CREATEFULLTEXT = 'CREATE TABLE fulltext ( id TEXT, fulltext TEXT );\n'
@@ -3176,7 +3363,7 @@ def _checkForIndex( carrel, localLibrary ) :
 
 	# these are what we want
 	CREATEINDX     = 'CREATE VIRTUAL TABLE indx USING FTS5( id, author, title, date, summary, keyword, words, sentence, flesch, cache, txt, fulltext );'
-	INDEX          = 'INSERT INTO indx SELECT b.id, b.author, b.title, b.date, b.summary, group_concat( LOWER( w.keyword ), "; " ), b.words, b.sentence, b.flesch, b.id || b.extension, b.id || ".txt", f.fulltext FROM bib AS b, fulltext AS f, wrd AS w WHERE b.id IS f.id AND b.id IS w.id GROUP BY w.id;';
+	INDEX          = 'INSERT INTO indx SELECT b.id, b.author, b.title, b.date, b.summary, group_concat( LOWER( w.keyword ), "; " ), b.words, b.sentence, b.flesch, b.id || b.extension, b.id || ".txt", f.fulltext FROM bib AS b JOIN fulltext AS f ON b.id IS f.id LEFT JOIN wrd AS w ON b.id IS w.id GROUP BY b.id;';
 
 	# these work when "database is full"; no full text
 	#CREATEINDX     = 'CREATE VIRTUAL TABLE indx USING FTS5( id, author, title, date, summary, keyword, words, sentence, flesch, cache, txt );'
@@ -3199,10 +3386,11 @@ def _checkForIndex( carrel, localLibrary ) :
 	connection.isolation_level = None
 	cursor                     = connection.cursor()
 		
-	# check to see if we've been here previously
+	# check to see if we've been here previously, and that nothing
+	# (stopwords, txt/) has changed since
 	results = cursor.execute( SANITYCHECK ).fetchall()
-	if results == [] :
-		
+	if results == [] or refresh or _cacheIsStale( carrel, localLibrary, KEY ) :
+
 		# nope; create full text table
 		sys.stderr.write( 'Indexing; the carrel must be set up for full text searching.\n' )
 		sys.stderr.write( 'Step #1 of 4: Creating table to contain full text...\n' )
@@ -3261,17 +3449,18 @@ def _checkForIndex( carrel, localLibrary ) :
 		connection.execute( DROPINDX )
 		connection.execute( CREATEINDX )
 		connection.execute( INDEX )
+		_cacheRecord( carrel, localLibrary, KEY )
 
 		# done
 		sys.stderr.write( 'Done. Happy searching!\n' )
 		return
 		
 # do full text indexing and search
-def search( carrel, localLibrary=None, query='love', output='human' ) :
+def search( carrel, localLibrary=None, query='love', output='human', refresh=False ) :
 	'''output = csv|tsv|json|human|count'''
 
 	# configure
-	SQL = "SELECT id, author, title, date, summary, keyword, words, sentence, flesch, '##CACHE##' || cache AS cache, '##TXT##' || txt AS txt FROM indx WHERE indx MATCH '##QUERY##' ORDER BY RANK;"
+	SQL = "SELECT id, author, title, date, summary, keyword, words, sentence, flesch, '##CACHE##' || cache AS cache, '##TXT##' || txt AS txt FROM indx WHERE indx MATCH ? ORDER BY RANK;"
 
 	# configure
 	RESULTS = '\nYour search (##QUERY##) against the study carrel named "##CARREL##" returned ##COUNT## record(s):\n\n##RECORDS##'
@@ -3290,7 +3479,7 @@ def search( carrel, localLibrary=None, query='love', output='human' ) :
 
 	# sanity checks
 	checkForCarrel( carrel, library )
-	_checkForIndex( carrel, library )
+	_checkForIndex( carrel, library, refresh=refresh )
 
 	txt          = str( library/carrel/TXT ) + '/'
 	cache        = str( library/carrel/CACHE ) + '/'
@@ -3300,10 +3489,16 @@ def search( carrel, localLibrary=None, query='love', output='human' ) :
 	# build sql
 	sql = SQL.replace( '##CACHE##', cache )
 	sql = sql.replace( '##TXT##', txt )
-	sql = sql.replace( '##QUERY##', query )
 
-	# search
-	rows = pd.read_sql_query( sql, connection, index_col='id' )
+	# search; the query is bound, not interpolated, so it can't break
+	# the SQL statement itself. FTS5's own query grammar can still
+	# reject a malformed query (an unescaped apostrophe, for example),
+	# which surfaces here as a clean message instead of a traceback
+	try :
+		rows = pd.read_sql_query( sql, connection, index_col='id', params=( query, ) )
+	except ( sqlite3.OperationalError, pd.errors.DatabaseError ) as error :
+		sys.stderr.write( f"Error: invalid full text query ({ query }): { error }\n" )
+		exit()
 	
 	# output; csv
 	if output   == 'csv' : return( rows.to_csv() )
@@ -3526,14 +3721,11 @@ def _checkForTika( tika ) :
 
 		# _initialize
 		click.echo( "\n  INFO: Updating configurations... " )
-		configurations          = ConfigParser()
-		applicationDirectory    = Path.home()
-		configurationFile       = applicationDirectory/CONFIGURATIONFILE
 		localLibrary            = configuration( 'localLibrary' )
 		malletHome              = configuration( 'malletHome' )
+		notebooksHome           = configuration( 'notebooksHome' )
 		tikaHome                = Path.home()/TIKAHOME
-		configurations[ "RDR" ] = { "localLibrary"  : localLibrary, "malletHome" : malletHome, "tikaHome" : tikaHome }
-		with open( configurationFile, 'w', encoding='utf-8'  ) as handle : configurations.write( handle )
+		_writeConfigurations( localLibrary, malletHome, tikaHome, notebooksHome )
 
 		# done
 		click.echo( '''
@@ -3666,6 +3858,7 @@ def _file2bib( carrel, file, metadata=None, localLibrary=None ) :
 	from   tika                 import detector
 	from   tika                 import parser
 	import os
+	import pandas as pd
 	import spacy
 	import pytextrank
 	
@@ -3689,30 +3882,40 @@ def _file2bib( carrel, file, metadata=None, localLibrary=None ) :
 	text   = parsed[ 'content' ]	
 	if not text : return
 	
-	# get metadata from the metadata file	
-	if str( type( metadata ) ) == "<class 'pandas.core.frame.DataFrame'>" :
-		
+	# get metadata from the metadata file
+	extra = {}
+	if isinstance( metadata, pd.DataFrame ) :
+
 		# parse
 		index = Path( file ).name
-		
+
+		# ingest any metadata.csv columns beyond author/title/date, so
+		# -f (cmdTm) can pivot on real, user-supplied fields instead
+		# of the fixed bib schema
+		for column in metadata.columns :
+			if column not in ( 'author', 'title', 'date' ) : extra[ column ] = ''
+
 		# check to see if the index value exists
 		if index in metadata.index :
-		
+
 			if 'author' in metadata :
-		
+
 				author      = str( metadata.loc[ index ][ 'author' ] )
 				authorFound = True
-			
-			if 'title'  in metadata : 
-		
+
+			if 'title'  in metadata :
+
 				title  = metadata.loc[ index ][ 'title' ]
 				titleFound = True
-			
-			if 'date'   in metadata : 
-		
+
+			if 'date'   in metadata :
+
 				date      = str( metadata.loc[ index ][ 'date' ] )
 				dateFound = True
-		
+
+			# capture this document's value for each extra column
+			for column in extra : extra[ column ] = str( metadata.loc[ index ][ column ] )
+
 	# get metadata from the source file
 	metadata = parsed[ 'metadata' ] 
 	mimetype = detector.from_file( file )
@@ -3793,11 +3996,12 @@ def _file2bib( carrel, file, metadata=None, localLibrary=None ) :
 	with open( output, 'w', encoding='utf-8' ) as handle :
 	
 		try :
-		
-			# output the header and the data
-			handle.write( '\t'.join( HEADER ) + '\n' )
-			handle.write( '\t'.join( [ str( key ), author, str( title ), str( date ), pages, extension, mimetype, str( words ), str( sentences ), str( flesch ), summary, str( cache ), str( txt ) ] ) + '\n' )
-		
+
+			# output the header and the data; append any extra
+			# metadata.csv columns so -f (cmdTm) can pivot on them
+			handle.write( '\t'.join( HEADER + list( extra.keys() ) ) + '\n' )
+			handle.write( '\t'.join( [ str( key ), author, str( title ), str( date ), pages, extension, mimetype, str( words ), str( sentences ), str( flesch ), summary, str( cache ), str( txt ) ] + list( extra.values() ) ) + '\n' )
+
 		# trap weird TypeError
 		except TypeError : click.echo( ( "\nWARNING (TypeError): Probably weird author value extracted from PDF file (key: %s). Call Eric.\n" % key ), err=True )
 			
@@ -4188,8 +4392,11 @@ def _txt2wrd( carrel, file, localLibrary=None ) :
 	doc            = nlp( text )
 
 	# do the extraction
-	try    : records = ( yake( doc, ngrams=NGRAMS, window_size=WINDOWSIZE, topn=TOPN, normalize=NORMALIZE, include_pos=POS ) )
-	except : records = []
+	try :
+		records = ( yake( doc, ngrams=NGRAMS, window_size=WINDOWSIZE, topn=TOPN, normalize=NORMALIZE, include_pos=POS ) )
+	except Exception as error :
+		click.echo( f"WARNING: keyword extraction failed for { key }: { error }", err=True )
+		records = []
 	
 	# check for records
 	if len( records ) > 0 :
@@ -4275,9 +4482,18 @@ def _tsv2db( directory, extension, table, connection ) :
 
 		# update
 		found = True
-		
+
 	# fill the database, conditionally
-	if found : features.to_sql( table, connection, if_exists='replace', index=False )
+	if found :
+
+		# cast known-numeric bib columns so ORDER BY sorts them
+		# numerically instead of lexicographically; existing carrels
+		# built before this fix are handled by the CAST(...AS INTEGER)
+		# in sizes()/flesch() instead of a migration
+		for column in ( 'words', 'sentence', 'flesch', 'pages' ) :
+			if column in features.columns : features[ column ] = pd.to_numeric( features[ column ], errors='coerce' )
+
+		features.to_sql( table, connection, if_exists='replace', index=False )
 
 
 def build( carrel, directory, erase=False, start=False, localLibrary=None ) :
