@@ -120,6 +120,20 @@ jobs:
       - name: Build the mini carrel
         run: rdr build mini tests/fixtures/mini
 
+      # TEMPORARY diagnostic: the previous run's build "succeeded" (exit 0,
+      # all 7 steps printed) but most notebooks then failed with symptoms
+      # consistent with an empty carrel (0 words for a wordcloud, empty
+      # vocabulary, int(None)). Print real row counts to confirm before
+      # digging further -- remove once root-caused.
+      - name: Diagnostic -- mini carrel row counts
+        run: |
+          sqlite3 "$HOME/reader-library/mini/etc/carrel.db" \
+            "select 'bib', count(*) from bib union all
+             select 'wrd', count(*) from wrd union all
+             select 'ent', count(*) from ent union all
+             select 'pos', count(*) from pos;"
+          wc -l "$HOME"/reader-library/mini/ent/*.ent "$HOME"/reader-library/mini/pos/*.pos "$HOME"/reader-library/mini/wrd/*.wrd
+
       - name: Run notebooks against the mini carrel
         run: pytest --nbmake notebooks/ --nbmake-timeout=600
 
