@@ -135,6 +135,16 @@ jobs:
           ls -la "$HOME/reader-library/mini/cache/" || true
           echo "--- bib table ---"
           sqlite3 "$HOME/reader-library/mini/etc/carrel.db" "select * from bib;" || true
+          echo "--- raw curl against the Tika REST endpoint (bypassing tika-python) ---"
+          curl -sS -X PUT --data-binary @tests/fixtures/mini/iliad-book1-excerpt.txt -H "Accept: text/plain" -H "Content-Type: text/plain" http://localhost:9998/tika
+          echo
+          echo "--- tika-python's own parser.from_file(), directly ---"
+          python -c "
+          from tika import parser
+          parsed = parser.from_file('tests/fixtures/mini/iliad-book1-excerpt.txt')
+          print('metadata:', parsed.get('metadata'))
+          print('content repr:', repr(parsed.get('content'))[:300])
+          "
 
       - name: Run notebooks against the mini carrel
         run: pytest --nbmake notebooks/ --nbmake-timeout=600
