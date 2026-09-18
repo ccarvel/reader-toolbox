@@ -23,9 +23,7 @@ The Toolbox full-text searching via the search subcommand.
 SQL
 ---
 
-Just about all the content of a study carrel -- full text content, parts-of-speech, URLs, addresses, named-entities, etc. -- has been reduced to an SQLite relational database file (./etc/reader.db) with the following structure:
-
-[INSERT STRUCTURE HERE.]
+Just about all the content of a study carrel -- full text content, parts-of-speech, URLs, addresses, named-entities, etc. -- has been reduced to an SQLite relational database file (./etc/carrel.db). See :doc:`structure` for the full table-by-table, column-by-column schema.
 
 Using any SQLite client, one ought to be able to query the database to output more refined and specialized reports. 
 

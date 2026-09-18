@@ -64,11 +64,11 @@ For example, after importing an entire carrel into Wordle and generating a word 
 
 Here's a quick and dirty way to use World with content from any carrel:
 
-1. use your text editor to open the file <carrel>/etc/reader.txt, where <carrel> is the name of your study carrel; for these purposes, open homer/etc/reader.txt in your text editor; remember, you can be reminded where your study carrels are located using the following command::
+1. use your text editor to open the file <carrel>/etc/carrel.txt, where <carrel> is the name of your study carrel; for these purposes, open homer/etc/carrel.txt in your text editor; remember, you can be reminded where your study carrels are located using the following command::
 
 	rdr get
 
-2. look more closely at the result; as described in the section on the structure of a study carrel, reader.txt is a concatonation of all the plain text items in the carrel
+2. look more closely at the result; as described in the section on the structure of a study carrel, carrel.txt is a concatenation of all the plain text items in the carrel
 
 3. select all the text in your text editor, and copy it to your clipboard
 

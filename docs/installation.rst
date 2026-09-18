@@ -12,13 +12,20 @@ Two external, non-Python tools are required before you build your first carrel:
 
   * **MALLET** -- only needed for the ``tm`` (topic modeling) command. If it is not already configured, the first ``rdr tm`` run downloads and configures it for you.
 
-Install the Toolbox itself with ``pip``: ::
+This documentation describes `ccarvel/reader-toolbox <https://github.com/ccarvel/reader-toolbox>`_, a fork of
+Eric Lease Morgan's original `ericleasemorgan/reader-toolbox <https://github.com/ericleasemorgan/reader-toolbox>`_
+carrying correctness and fidelity fixes (see the project's ``CHANGELOG.md`` and the README's Credits section).
+Those fixes aren't published to PyPI, so install from this fork to get them: ::
+
+  pip install "reader-toolbox @ git+https://github.com/ccarvel/reader-toolbox.git@v1.2.0"
+
+The original, unfixed upstream release is also on PyPI: ::
 
   pip install reader-toolbox
 
-Or install the development version: ::
+Or install a development checkout of this fork: ::
 
-  git clone https://github.com/ericleasemorgan/reader-toolbox.git
+  git clone https://github.com/ccarvel/reader-toolbox.git
   cd reader-toolbox
   pip install -e .
 
